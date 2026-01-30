@@ -6,8 +6,8 @@ public class ResourceAllocationSummary
     public string ResourceName { get; set; } = string.Empty;
     public string RoleName { get; set; } = string.Empty;
     public bool RequiresCapacity { get; set; }
-    public int PeriodId { get; set; }
-    public string PeriodName { get; set; } = string.Empty;
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
     public int TotalPercentage { get; set; }
     public bool IsOverAllocated => RequiresCapacity && TotalPercentage > 100;
     public List<ProjectAllocation> ProjectAllocations { get; set; } = new();
@@ -20,4 +20,6 @@ public class ProjectAllocation
     public string ProjectName { get; set; } = string.Empty;
     public int? Percentage { get; set; }
     public string RoleName { get; set; } = string.Empty;
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
 }

@@ -16,7 +16,6 @@ public class AppDbContext : DbContext
     public DbSet<ResourceSkill> ResourceSkills => Set<ResourceSkill>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectStatus> ProjectStatuses => Set<ProjectStatus>();
-    public DbSet<Period> Periods => Set<Period>();
     public DbSet<Allocation> Allocations => Set<Allocation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -60,15 +59,9 @@ public class AppDbContext : DbContext
             .WithMany(p => p.Allocations)
             .HasForeignKey(a => a.ProjectId);
 
+        // Index for faster queries on allocation date ranges
         modelBuilder.Entity<Allocation>()
-            .HasOne(a => a.Period)
-            .WithMany(p => p.Allocations)
-            .HasForeignKey(a => a.PeriodId);
-
-        // Unique constraint on allocation (Resource + Project + Period must be unique)
-        modelBuilder.Entity<Allocation>()
-            .HasIndex(a => new { a.ResourceId, a.ProjectId, a.PeriodId })
-            .IsUnique();
+            .HasIndex(a => new { a.ResourceId, a.StartDate, a.EndDate });
 
         // Project - Status relationship
         modelBuilder.Entity<Project>()
@@ -83,6 +76,5 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Vendor>().HasIndex(v => v.Name).IsUnique();
         modelBuilder.Entity<Project>().HasIndex(p => p.Name).IsUnique();
         modelBuilder.Entity<ProjectStatus>().HasIndex(s => s.Name).IsUnique();
-        modelBuilder.Entity<Period>().HasIndex(p => p.Name).IsUnique();
     }
 }

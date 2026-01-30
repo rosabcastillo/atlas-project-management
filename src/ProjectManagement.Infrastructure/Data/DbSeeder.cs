@@ -173,22 +173,11 @@ public static class DbSeeder
         await context.ResourceSkills.AddRangeAsync(resourceSkills);
         await context.SaveChangesAsync();
 
-        // Seed Periods (Q1 FY26)
-        var periods = new List<Period>
-        {
-            new() { Name = "January 2026", Type = PeriodType.Month, StartDate = new DateTime(2026, 1, 1), EndDate = new DateTime(2026, 1, 31) },
-            new() { Name = "February 2026", Type = PeriodType.Month, StartDate = new DateTime(2026, 2, 1), EndDate = new DateTime(2026, 2, 28) },
-            new() { Name = "March 2026", Type = PeriodType.Month, StartDate = new DateTime(2026, 3, 1), EndDate = new DateTime(2026, 3, 31) },
-            new() { Name = "Q1 FY26", Type = PeriodType.Quarter, StartDate = new DateTime(2026, 1, 1), EndDate = new DateTime(2026, 3, 31) },
-            new() { Name = "Q2 FY26", Type = PeriodType.Quarter, StartDate = new DateTime(2026, 4, 1), EndDate = new DateTime(2026, 6, 30) }
-        };
-        await context.Periods.AddRangeAsync(periods);
-        await context.SaveChangesAsync();
-
         // Seed Allocations
-        var jan2026 = periods.First(p => p.Name == "January 2026");
-        var feb2026 = periods.First(p => p.Name == "February 2026");
-        var qaTole = roles.First(r => r.Name == "QA");
+        var jan2026Start = new DateTime(2026, 1, 1);
+        var jan2026End = new DateTime(2026, 1, 31);
+        var feb2026Start = new DateTime(2026, 2, 1);
+        var feb2026End = new DateTime(2026, 2, 28);
 
         var candidatePortal = projects.First(p => p.Name == "Candidate and Recruiter Portal");
         var oliver = projects.First(p => p.Name == "Oliver");
@@ -212,50 +201,50 @@ public static class DbSeeder
         var allocations = new List<Allocation>
         {
             // Harsh Darji - January
-            new() { ResourceId = harsh.Id, ProjectId = candidatePortal.Id, PeriodId = jan2026.Id, Percentage = 50 },
-            new() { ResourceId = harsh.Id, ProjectId = oliver.Id, PeriodId = jan2026.Id, Percentage = 30 },
-            new() { ResourceId = harsh.Id, ProjectId = socVoiceAI.Id, PeriodId = jan2026.Id, Percentage = 20 },
+            new() { ResourceId = harsh.Id, ProjectId = candidatePortal.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = 50 },
+            new() { ResourceId = harsh.Id, ProjectId = oliver.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = 30 },
+            new() { ResourceId = harsh.Id, ProjectId = socVoiceAI.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = 20 },
 
             // Priyanka Gat - January
-            new() { ResourceId = priyankaG.Id, ProjectId = arTool.Id, PeriodId = jan2026.Id, Percentage = 60 },
-            new() { ResourceId = priyankaG.Id, ProjectId = governance.Id, PeriodId = jan2026.Id, Percentage = 40 },
+            new() { ResourceId = priyankaG.Id, ProjectId = arTool.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = 60 },
+            new() { ResourceId = priyankaG.Id, ProjectId = governance.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = 40 },
 
             // Priyanka Tekale - January
-            new() { ResourceId = priyankaT.Id, ProjectId = lp.Id, PeriodId = jan2026.Id, Percentage = 70 },
-            new() { ResourceId = priyankaT.Id, ProjectId = migration.Id, PeriodId = jan2026.Id, Percentage = 30 },
+            new() { ResourceId = priyankaT.Id, ProjectId = lp.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = 70 },
+            new() { ResourceId = priyankaT.Id, ProjectId = migration.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = 30 },
 
             // Shweta - January
-            new() { ResourceId = shweta.Id, ProjectId = familyConnect.Id, PeriodId = jan2026.Id, Percentage = 50 },
-            new() { ResourceId = shweta.Id, ProjectId = candidatePortal.Id, PeriodId = jan2026.Id, Percentage = 50 },
+            new() { ResourceId = shweta.Id, ProjectId = familyConnect.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = 50 },
+            new() { ResourceId = shweta.Id, ProjectId = candidatePortal.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = 50 },
 
             // Suyog - January
-            new() { ResourceId = suyog.Id, ProjectId = migration.Id, PeriodId = jan2026.Id, Percentage = 80 },
-            new() { ResourceId = suyog.Id, ProjectId = socVoiceAI.Id, PeriodId = jan2026.Id, Percentage = 20 },
+            new() { ResourceId = suyog.Id, ProjectId = migration.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = 80 },
+            new() { ResourceId = suyog.Id, ProjectId = socVoiceAI.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = 20 },
 
             // Rosa (SM) - January
-            new() { ResourceId = rosa.Id, ProjectId = migration.Id, PeriodId = jan2026.Id, Percentage = null },
-            new() { ResourceId = rosa.Id, ProjectId = governance.Id, PeriodId = jan2026.Id, Percentage = null },
+            new() { ResourceId = rosa.Id, ProjectId = migration.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = null },
+            new() { ResourceId = rosa.Id, ProjectId = governance.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = null },
 
             // Tarandeep (SM) - January
-            new() { ResourceId = tarandeep.Id, ProjectId = candidatePortal.Id, PeriodId = jan2026.Id, Percentage = null },
-            new() { ResourceId = tarandeep.Id, ProjectId = oliver.Id, PeriodId = jan2026.Id, Percentage = null },
+            new() { ResourceId = tarandeep.Id, ProjectId = candidatePortal.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = null },
+            new() { ResourceId = tarandeep.Id, ProjectId = oliver.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = null },
 
             // Jess P (PO) - January
-            new() { ResourceId = jessP.Id, ProjectId = arTool.Id, PeriodId = jan2026.Id, Percentage = null },
-            new() { ResourceId = jessP.Id, ProjectId = governance.Id, PeriodId = jan2026.Id, Percentage = null },
+            new() { ResourceId = jessP.Id, ProjectId = arTool.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = null },
+            new() { ResourceId = jessP.Id, ProjectId = governance.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = null },
 
             // Shubham (BA) - January
-            new() { ResourceId = shubham.Id, ProjectId = candidatePortal.Id, PeriodId = jan2026.Id, Percentage = null },
-            new() { ResourceId = shubham.Id, ProjectId = socVoiceAI.Id, PeriodId = jan2026.Id, Percentage = null },
+            new() { ResourceId = shubham.Id, ProjectId = candidatePortal.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = null },
+            new() { ResourceId = shubham.Id, ProjectId = socVoiceAI.Id, StartDate = jan2026Start, EndDate = jan2026End, Percentage = null },
 
             // February allocations
-            new() { ResourceId = harsh.Id, ProjectId = candidatePortal.Id, PeriodId = feb2026.Id, Percentage = 40 },
-            new() { ResourceId = harsh.Id, ProjectId = familyConnect.Id, PeriodId = feb2026.Id, Percentage = 60 },
+            new() { ResourceId = harsh.Id, ProjectId = candidatePortal.Id, StartDate = feb2026Start, EndDate = feb2026End, Percentage = 40 },
+            new() { ResourceId = harsh.Id, ProjectId = familyConnect.Id, StartDate = feb2026Start, EndDate = feb2026End, Percentage = 60 },
 
-            new() { ResourceId = priyankaG.Id, ProjectId = arTool.Id, PeriodId = feb2026.Id, Percentage = 50 },
-            new() { ResourceId = priyankaG.Id, ProjectId = lp.Id, PeriodId = feb2026.Id, Percentage = 50 },
+            new() { ResourceId = priyankaG.Id, ProjectId = arTool.Id, StartDate = feb2026Start, EndDate = feb2026End, Percentage = 50 },
+            new() { ResourceId = priyankaG.Id, ProjectId = lp.Id, StartDate = feb2026Start, EndDate = feb2026End, Percentage = 50 },
 
-            new() { ResourceId = suyog.Id, ProjectId = migration.Id, PeriodId = feb2026.Id, Percentage = 100 },
+            new() { ResourceId = suyog.Id, ProjectId = migration.Id, StartDate = feb2026Start, EndDate = feb2026End, Percentage = 100 },
         };
         await context.Allocations.AddRangeAsync(allocations);
         await context.SaveChangesAsync();

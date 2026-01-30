@@ -174,7 +174,7 @@
                                 <td colspan="6">
                                     <div class="allocation-panel">
                                         <div class="allocation-grid">
-                                            @foreach (var allocation in project.Allocations.OrderBy(a => a.Resource.Name).ThenBy(a => a.Period.StartDate))
+                                            @foreach (var allocation in project.Allocations.OrderBy(a => a.Resource.Name).ThenBy(a => a.StartDate))
                                             {
                                                 <div class="allocation-card @(draggedAllocation?.Id == allocation.Id ? "dragging" : "")"
                                                      draggable="true"
@@ -183,7 +183,7 @@
                                                     <span class="drag-handle">⋮⋮</span>
                                                     <span class="allocation-resource">@allocation.Resource.Name</span>
                                                     <span class="badge badge-info">@allocation.Resource.Role.Name</span>
-                                                    <span class="allocation-period">@allocation.Period.Name</span>
+                                                    <span class="allocation-dates">@allocation.StartDate.ToString("MMM dd") - @allocation.EndDate.ToString("MMM dd")</span>
                                                     @if (allocation.Percentage.HasValue)
                                                     {
                                                         <span class="allocation-percentage">@allocation.Percentage%</span>
@@ -295,7 +295,7 @@
                         <span class="move-arrow">→</span>
                         <span class="to-project">@targetProjectName</span>
                     </p>
-                    <p class="period-info">Period: @allocationToMove.Period.Name</p>
+                    <p class="period-info">@allocationToMove.StartDate.ToString("MMM dd, yyyy") - @allocationToMove.EndDate.ToString("MMM dd, yyyy")</p>
                 </div>
 
                 @if (hasExistingRoleConflict)
@@ -304,7 +304,7 @@
                         <span class="warning-icon">⚠️</span>
                         <div class="warning-content">
                             <strong>@allocationToMove.Resource.Role.Name already exists</strong>
-                            <p><strong>@existingRoleHolder</strong> is already assigned as @allocationToMove.Resource.Role.Name for this project in @allocationToMove.Period.Name.</p>
+                            <p><strong>@existingRoleHolder</strong> is already assigned as @allocationToMove.Resource.Role.Name for this project in the same period.</p>
                             <p>Do you want to add another @allocationToMove.Resource.Role.Name to this project?</p>
                         </div>
                     </div>
@@ -339,6 +339,13 @@
         </div>
     </div>
 }
+
+<style>
+    .allocation-dates {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+</style>
 
 @code {
     private RenderFragment RenderProjectRow(Project project) => __builder =>
@@ -491,8 +498,6 @@
             .Include(p => p.Allocations)
                 .ThenInclude(a => a.Resource)
                     .ThenInclude(r => r.Role)
-            .Include(p => p.Allocations)
-                .ThenInclude(a => a.Period)
             .OrderBy(p => p.Name)
             .ToListAsync();
         accountableLeads = projects
@@ -701,7 +706,7 @@
         newPercentage = draggedAllocation.Percentage;
         keepSameCapacity = true;
 
-        // Check for existing SM or PO in target project for the same period
+        // Check for existing SM or PO in target project for overlapping date range
         hasExistingRoleConflict = false;
         existingRoleHolder = "";
 
@@ -712,7 +717,9 @@
             if (targetProject != null)
             {
                 var existingAllocation = targetProject.Allocations
-                    .FirstOrDefault(a => a.Resource.Role.Name == roleName && a.PeriodId == draggedAllocation.PeriodId);
+                    .FirstOrDefault(a => a.Resource.Role.Name == roleName &&
+                                        a.StartDate <= draggedAllocation.EndDate &&
+                                        a.EndDate >= draggedAllocation.StartDate);
 
                 if (existingAllocation != null)
                 {

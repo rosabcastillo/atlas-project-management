@@ -145,25 +145,43 @@
             .Take(5)
             .ToListAsync();
 
-        // Calculate over-allocated (resources with >100% allocation in any period)
+        // Calculate over-allocated (resources with >100% allocation in any overlapping period)
         var resourcesWithCapacity = await DbContext.Resources
             .Include(r => r.Role)
             .Include(r => r.Allocations)
             .Where(r => r.Role.RequiresCapacity)
             .ToListAsync();
 
-        var periods = await DbContext.Periods.ToListAsync();
         foreach (var resource in resourcesWithCapacity)
         {
-            foreach (var period in periods)
+            var allocations = resource.Allocations.Where(a => a.Percentage.HasValue).ToList();
+            if (!allocations.Any()) continue;
+
+            // Find all date boundaries
+            var boundaries = new HashSet<DateTime>();
+            foreach (var alloc in allocations)
             {
-                var total = resource.Allocations
-                    .Where(a => a.PeriodId == period.Id && a.Percentage.HasValue)
+                boundaries.Add(alloc.StartDate);
+                boundaries.Add(alloc.EndDate);
+            }
+
+            var sortedBoundaries = boundaries.OrderBy(d => d).ToList();
+
+            // Check each period between boundaries for over-allocation
+            for (int i = 0; i < sortedBoundaries.Count - 1; i++)
+            {
+                var periodStart = sortedBoundaries[i];
+                var periodEnd = sortedBoundaries[i + 1];
+                var midPoint = periodStart.AddDays((periodEnd - periodStart).TotalDays / 2);
+
+                var periodTotal = allocations
+                    .Where(a => a.StartDate <= midPoint && a.EndDate >= midPoint)
                     .Sum(a => a.Percentage ?? 0);
-                if (total > 100)
+
+                if (periodTotal > 100)
                 {
                     overAllocatedCount++;
-                    break;
+                    break; // Count each resource only once
                 }
             }
         }

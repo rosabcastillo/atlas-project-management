@@ -3,6 +3,7 @@
 @using ProjectManagement.Infrastructure.Data
 @using ProjectManagement.Domain.Entities
 @using ProjectManagement.Application.Services
+@using ProjectManagement.Application.DTOs
 @inject AppDbContext DbContext
 @inject AllocationService AllocationService
 @rendermode InteractiveServer
@@ -23,13 +24,14 @@
             <div class="search-box">
                 <input type="text" class="form-control" placeholder="Search resources..." @bind="searchTerm" @bind:event="oninput" />
             </div>
-            <select class="form-control" style="width: auto; min-width: 200px;" @bind="selectedPeriodId" @bind:after="OnFilterChanged">
-                <option value="0">All Periods</option>
-                @foreach (var period in periods)
-                {
-                    <option value="@period.Id">@period.Name</option>
-                }
-            </select>
+            <div class="date-filter">
+                <label>From:</label>
+                <input type="date" class="form-control" @bind="filterStartDate" style="width: auto;" />
+            </div>
+            <div class="date-filter">
+                <label>To:</label>
+                <input type="date" class="form-control" @bind="filterEndDate" style="width: auto;" />
+            </div>
             <select class="form-control" style="width: auto;" @bind="selectedRoleId" @bind:after="OnFilterChanged">
                 <option value="0">All Roles</option>
                 @foreach (var role in roles)
@@ -50,8 +52,8 @@
                 <tr>
                     <th class="sortable @(GetSortClass("Resource"))" @onclick='() => SetSort("Resource")'>Resource</th>
                     <th class="sortable @(GetSortClass("Role"))" @onclick='() => SetSort("Role")'>Role</th>
-                    <th>Total Allocation</th>
-                    <th>Projects</th>
+                    <th>Max Allocation</th>
+                    <th>Allocations</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -61,8 +63,9 @@
                     var resourceAllocations = GetResourceAllocations(resource.Id);
                     var hasAllocations = resourceAllocations.Any();
                     var isExpanded = expandedResources.Contains(resource.Id);
+                    var isTerminated = resource.EndDate.HasValue && resource.EndDate.Value < DateTime.Today;
 
-                    <tr class="@(hasAllocations ? "resource-expandable" : "")">
+                    <tr class="@(hasAllocations ? "resource-expandable" : "") @(isTerminated ? "row-terminated" : "")">
                         <td>
                             @if (hasAllocations)
                             {
@@ -75,6 +78,10 @@
                                 <span class="expand-placeholder"></span>
                             }
                             <strong>@resource.Name</strong>
+                            @if (isTerminated)
+                            {
+                                <span class="badge badge-danger" style="margin-left: 8px;">Terminated</span>
+                            }
                         </td>
                         <td>
                             <span class="badge @(resource.Role.RequiresCapacity ? "badge-primary" : "badge-secondary")">
@@ -84,18 +91,18 @@
                         <td>
                             @if (resource.Role.RequiresCapacity)
                             {
-                                var maxPeriodAllocation = GetMaxPeriodAllocation(resource.Id);
-                                var hasOverlap = HasOverlappingPeriodsForResource(resource.Id);
+                                var maxOverlap = GetMaxOverlapAllocation(resource.Id);
+                                var hasOverlap = HasOverlappingDates(resource.Id);
                                 <div class="allocation-bar-container">
                                     <div class="allocation-bar">
-                                        <div class="allocation-bar-fill @GetAllocationClass(maxPeriodAllocation)"
-                                             style="width: @Math.Min(maxPeriodAllocation, 100)%"></div>
+                                        <div class="allocation-bar-fill @GetAllocationClass(maxOverlap)"
+                                             style="width: @Math.Min(maxOverlap, 100)%"></div>
                                     </div>
-                                    <span class="allocation-text @(maxPeriodAllocation > 100 ? "danger" : "")">
-                                        @maxPeriodAllocation%
+                                    <span class="allocation-text @(maxOverlap > 100 ? "danger" : "")">
+                                        @maxOverlap%
                                         @if (hasOverlap)
                                         {
-                                            <span class="overlap-indicator" title="Has overlapping periods">⚠️</span>
+                                            <span class="overlap-indicator" title="Has overlapping date ranges">⚠️</span>
                                         }
                                     </span>
                                 </div>
@@ -106,10 +113,13 @@
                             }
                         </td>
                         <td>
-                            <span class="project-count">@resourceAllocations.Count() project(s)</span>
+                            <span class="project-count">@resourceAllocations.Count() allocation(s)</span>
                         </td>
                         <td>
-                            <button class="btn btn-primary btn-sm" @onclick="() => OpenAddModalForResource(resource)">+ Allocate</button>
+                            @if (!isTerminated)
+                            {
+                                <button class="btn btn-primary btn-sm" @onclick="() => OpenAddModalForResource(resource)">+ Allocate</button>
+                            }
                         </td>
                     </tr>
                     @if (isExpanded && hasAllocations)
@@ -117,176 +127,32 @@
                         <tr class="allocation-panel-row">
                             <td colspan="5">
                                 <div class="allocation-panel">
-                                    @if (resource.Role.RequiresCapacity)
-                                    {
-                                        @* Show hierarchical period view with cascading allocations for Developer/QA *@
-                                        var parentPeriodAllocations = resourceAllocations
-                                            .Where(a => IsParentPeriod(a.Period))
-                                            .GroupBy(a => a.Period)
-                                            .OrderBy(g => g.Key.StartDate)
-                                            .ToList();
-
-                                        var childPeriods = GetChildPeriodsForResource(resourceAllocations);
-
-                                        @* Show parent period (quarterly) allocations first as base *@
-                                        @foreach (var parentGroup in parentPeriodAllocations)
+                                    <div class="allocation-list">
+                                        @foreach (var allocation in resourceAllocations.OrderBy(a => a.StartDate).ThenBy(a => a.Project.Name))
                                         {
-                                            var parentTotal = parentGroup.Sum(a => a.Percentage ?? 0);
-                                            <div class="period-group parent-period">
-                                                <div class="period-header parent-header">
-                                                    <span class="period-name">
-                                                        <span class="period-type-badge">BASE</span>
-                                                        @parentGroup.Key.Name
+                                            var hasDateOverlap = GetOverlappingAllocationsCount(allocation) > 0;
+                                            <div class="allocation-item @(hasDateOverlap ? "has-overlap" : "")">
+                                                <div class="allocation-item-info">
+                                                    <span class="allocation-project">@allocation.Project.Name</span>
+                                                    <span class="allocation-dates">
+                                                        @allocation.StartDate.ToString("MMM dd, yyyy") - @allocation.EndDate.ToString("MMM dd, yyyy")
                                                     </span>
-                                                    <div class="period-total">
-                                                        <span class="allocation-text-sm">@parentTotal% base</span>
-                                                    </div>
-                                                </div>
-                                                <div class="allocation-list">
-                                                    @foreach (var allocation in parentGroup.OrderBy(a => a.Project.Name))
+                                                    @if (hasDateOverlap)
                                                     {
-                                                        <div class="allocation-item">
-                                                            <div class="allocation-item-info">
-                                                                <span class="allocation-project">@allocation.Project.Name</span>
-                                                            </div>
-                                                            <div class="allocation-item-actions">
-                                                                <span class="allocation-percentage-badge">@(allocation.Percentage ?? 0)%</span>
-                                                                <button class="btn btn-secondary btn-xs" @onclick="() => OpenEditModal(allocation)">Edit</button>
-                                                                <button class="btn btn-danger btn-xs" @onclick="() => DeleteAllocation(allocation)">Delete</button>
-                                                            </div>
-                                                        </div>
+                                                        <span class="overlap-badge" title="Overlaps with @GetOverlappingAllocationsCount(allocation) other allocation(s)">⚠️ Overlap</span>
                                                     }
+                                                </div>
+                                                <div class="allocation-item-actions">
+                                                    @if (resource.Role.RequiresCapacity)
+                                                    {
+                                                        <span class="allocation-percentage-badge">@(allocation.Percentage ?? 0)%</span>
+                                                    }
+                                                    <button class="btn btn-secondary btn-xs" @onclick="() => OpenEditModal(allocation)">Edit</button>
+                                                    <button class="btn btn-danger btn-xs" @onclick="() => DeleteAllocation(allocation)">Delete</button>
                                                 </div>
                                             </div>
                                         }
-
-                                        @* Show child periods (months) with effective totals *@
-                                        @foreach (var childPeriod in childPeriods.OrderBy(p => p.StartDate))
-                                        {
-                                            var directAllocations = resourceAllocations
-                                                .Where(a => a.PeriodId == childPeriod.Id)
-                                                .ToList();
-
-                                            var inheritedAllocations = GetInheritedAllocations(resourceAllocations, childPeriod);
-                                            var directTotal = directAllocations.Sum(a => a.Percentage ?? 0);
-                                            var inheritedTotal = inheritedAllocations.Sum(a => a.Percentage ?? 0);
-                                            var effectiveTotal = directTotal + inheritedTotal;
-                                            var hasInherited = inheritedAllocations.Any();
-
-                                            <div class="period-group child-period-group">
-                                                <div class="period-header">
-                                                    <span class="period-name">
-                                                        @childPeriod.Name
-                                                        @if (hasInherited)
-                                                        {
-                                                            <span class="inherited-indicator" title="Includes inherited allocations from parent period">+inherited</span>
-                                                        }
-                                                    </span>
-                                                    <div class="period-total">
-                                                        <div class="allocation-bar-mini">
-                                                            <div class="allocation-bar-fill @GetAllocationClass(effectiveTotal)"
-                                                                 style="width: @Math.Min(effectiveTotal, 100)%"></div>
-                                                        </div>
-                                                        <span class="allocation-text-sm @(effectiveTotal > 100 ? "danger" : "")">
-                                                            @effectiveTotal%
-                                                            @if (effectiveTotal > 100)
-                                                            {
-                                                                <span>⚠️</span>
-                                                            }
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div class="allocation-list">
-                                                    @* Show inherited allocations first *@
-                                                    @foreach (var allocation in inheritedAllocations.OrderBy(a => a.Project.Name))
-                                                    {
-                                                        <div class="allocation-item inherited-item">
-                                                            <div class="allocation-item-info">
-                                                                <span class="inherited-marker">↳</span>
-                                                                <span class="allocation-project inherited">@allocation.Project.Name</span>
-                                                                <span class="inherited-from">from @allocation.Period.Name</span>
-                                                            </div>
-                                                            <div class="allocation-item-actions">
-                                                                <span class="allocation-percentage-badge inherited">@(allocation.Percentage ?? 0)%</span>
-                                                            </div>
-                                                        </div>
-                                                    }
-                                                    @* Show direct allocations *@
-                                                    @foreach (var allocation in directAllocations.OrderBy(a => a.Project.Name))
-                                                    {
-                                                        <div class="allocation-item">
-                                                            <div class="allocation-item-info">
-                                                                <span class="allocation-project">@allocation.Project.Name</span>
-                                                            </div>
-                                                            <div class="allocation-item-actions">
-                                                                <span class="allocation-percentage-badge">@(allocation.Percentage ?? 0)%</span>
-                                                                <button class="btn btn-secondary btn-xs" @onclick="() => OpenEditModal(allocation)">Edit</button>
-                                                                <button class="btn btn-danger btn-xs" @onclick="() => DeleteAllocation(allocation)">Delete</button>
-                                                            </div>
-                                                        </div>
-                                                    }
-                                                </div>
-                                            </div>
-                                        }
-
-                                        @* Show periods without parent (standalone months/quarters with no overlap) *@
-                                        var standalonePeriods = resourceAllocations
-                                            .Where(a => !IsParentPeriod(a.Period) && !childPeriods.Any(cp => cp.Id == a.PeriodId))
-                                            .GroupBy(a => a.Period)
-                                            .OrderBy(g => g.Key.StartDate);
-
-                                        foreach (var periodGroup in standalonePeriods)
-                                        {
-                                            var periodTotal = periodGroup.Sum(a => a.Percentage ?? 0);
-
-                                            <div class="period-group">
-                                                <div class="period-header">
-                                                    <span class="period-name">@periodGroup.Key.Name</span>
-                                                    <div class="period-total">
-                                                        <div class="allocation-bar-mini">
-                                                            <div class="allocation-bar-fill @GetAllocationClass(periodTotal)"
-                                                                 style="width: @Math.Min(periodTotal, 100)%"></div>
-                                                        </div>
-                                                        <span class="allocation-text-sm @(periodTotal > 100 ? "danger" : "")">@periodTotal%</span>
-                                                    </div>
-                                                </div>
-                                                <div class="allocation-list">
-                                                    @foreach (var allocation in periodGroup.OrderBy(a => a.Project.Name))
-                                                    {
-                                                        <div class="allocation-item">
-                                                            <div class="allocation-item-info">
-                                                                <span class="allocation-project">@allocation.Project.Name</span>
-                                                            </div>
-                                                            <div class="allocation-item-actions">
-                                                                <span class="allocation-percentage-badge">@(allocation.Percentage ?? 0)%</span>
-                                                                <button class="btn btn-secondary btn-xs" @onclick="() => OpenEditModal(allocation)">Edit</button>
-                                                                <button class="btn btn-danger btn-xs" @onclick="() => DeleteAllocation(allocation)">Delete</button>
-                                                            </div>
-                                                        </div>
-                                                    }
-                                                </div>
-                                            </div>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        @* Simple flat list for PO/SM/BA - no period grouping, no capacity *@
-                                        <div class="allocation-list">
-                                            @foreach (var allocation in resourceAllocations.OrderBy(a => a.Project.Name).ThenBy(a => a.Period.StartDate))
-                                            {
-                                                <div class="allocation-item">
-                                                    <div class="allocation-item-info">
-                                                        <span class="allocation-project">@allocation.Project.Name</span>
-                                                        <span class="allocation-period">@allocation.Period.Name</span>
-                                                    </div>
-                                                    <div class="allocation-item-actions">
-                                                        <button class="btn btn-secondary btn-xs" @onclick="() => OpenEditModal(allocation)">Edit</button>
-                                                        <button class="btn btn-danger btn-xs" @onclick="() => DeleteAllocation(allocation)">Delete</button>
-                                                    </div>
-                                                </div>
-                                            }
-                                        </div>
-                                    }
+                                    </div>
                                 </div>
                             </td>
                         </tr>
@@ -310,7 +176,7 @@
     <div class="modal-backdrop" @onclick="CloseModal">
         <div class="modal modal-lg" @onclick:stopPropagation="true">
             <div class="modal-header">
-                <h3 class="modal-title">@(isEditing ? "Edit Allocation" : "Add Allocations")</h3>
+                <h3 class="modal-title">@(isEditing ? "Edit Allocation" : "Add Allocation")</h3>
                 <button class="modal-close" @onclick="CloseModal">&times;</button>
             </div>
             <div class="modal-body">
@@ -322,12 +188,16 @@
                 {
                     <div class="alert alert-success">@successMessage</div>
                 }
+                @if (overlapWarningMessage != null)
+                {
+                    <div class="alert alert-warning">@overlapWarningMessage</div>
+                }
 
                 <div class="form-group">
                     <label class="form-label">Resource *</label>
                     <select class="form-control" @bind="modalResourceId" @bind:after="OnResourceChanged" disabled="@isEditing">
                         <option value="0">Select a resource...</option>
-                        @foreach (var resource in resources)
+                        @foreach (var resource in resources.Where(r => !r.EndDate.HasValue || r.EndDate.Value >= DateTime.Today))
                         {
                             <option value="@resource.Id">@resource.Name (@resource.Role.Name)</option>
                         }
@@ -338,180 +208,117 @@
                 {
                     var selectedResource = resources.FirstOrDefault(r => r.Id == modalResourceId);
 
+                    <div class="form-group">
+                        <label class="form-label">Project *</label>
+                        <select class="form-control" @bind="modalProjectId">
+                            <option value="0">Select a project...</option>
+                            @foreach (var project in projects)
+                            {
+                                <option value="@project.Id">@project.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group form-group-half">
+                            <label class="form-label">Start Date *</label>
+                            <input type="date" class="form-control" @bind="modalStartDate" />
+                        </div>
+                        <div class="form-group form-group-half">
+                            <label class="form-label">End Date *</label>
+                            <input type="date" class="form-control" @bind="modalEndDate" max="@(selectedResource?.EndDate?.ToString("yyyy-MM-dd"))" />
+                            @if (selectedResource?.EndDate.HasValue == true)
+                            {
+                                <small class="form-hint">Resource contract ends: @selectedResource.EndDate.Value.ToString("MMM dd, yyyy")</small>
+                            }
+                        </div>
+                    </div>
+
                     @if (showPercentageField)
                     {
                         <div class="form-group">
                             <label class="form-label">Allocation Percentage * (1-100)</label>
                             <input type="number" class="form-control" min="1" max="100" @bind="modalPercentage" />
-                            <small class="form-hint">This percentage will be applied to each project/period combination</small>
                         </div>
-                    }
-
-                    @if (isEditing)
-                    {
-                        @* Single select for edit mode *@
-                        <div class="form-group">
-                            <label class="form-label">Project *</label>
-                            <select class="form-control" @bind="modalProjectId">
-                                <option value="0">Select a project...</option>
-                                @foreach (var project in projects)
-                                {
-                                    <option value="@project.Id">@project.Name</option>
-                                }
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Period *</label>
-                            <select class="form-control" @bind="modalPeriodId">
-                                <option value="0">Select a period...</option>
-                                @foreach (var period in periods)
-                                {
-                                    <option value="@period.Id">@period.Name</option>
-                                }
-                            </select>
-                        </div>
-                    }
-                    else
-                    {
-                        @* Multi-select for add mode *@
-                        <div class="form-row">
-                            <div class="form-group form-group-half">
-                                <label class="form-label">Projects * <span class="selection-count">(@selectedProjectIds.Count selected)</span></label>
-                                <div class="checkbox-list">
-                                    @foreach (var project in projects)
-                                    {
-                                        <label class="checkbox-item">
-                                            <input type="checkbox" checked="@selectedProjectIds.Contains(project.Id)"
-                                                   @onchange="() => ToggleProjectSelection(project.Id)" />
-                                            <span>@project.Name</span>
-                                        </label>
-                                    }
-                                </div>
-                            </div>
-
-                            <div class="form-group form-group-half">
-                                <label class="form-label">Periods * <span class="selection-count">(@selectedPeriodIds.Count selected)</span></label>
-                                <div class="checkbox-list">
-                                    @foreach (var period in periods.OrderBy(p => p.StartDate))
-                                    {
-                                        <label class="checkbox-item">
-                                            <input type="checkbox" checked="@selectedPeriodIds.Contains(period.Id)"
-                                                   @onchange="() => TogglePeriodSelection(period.Id)" />
-                                            <span>@period.Name</span>
-                                        </label>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-
-                        @if (selectedProjectIds.Any() && selectedPeriodIds.Any())
-                        {
-                            <div class="allocation-preview">
-                                <label class="form-label">Preview: @(selectedProjectIds.Count * selectedPeriodIds.Count) allocation(s) will be created</label>
-                            </div>
-                        }
                     }
                 }
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
-                <button class="btn btn-primary" @onclick="SaveAllocation">@(isEditing ? "Save" : "Create Allocations")</button>
+                <button class="btn btn-primary" @onclick="SaveAllocation">@(isEditing ? "Save" : "Create Allocation")</button>
             </div>
         </div>
     </div>
 }
 
-@if (showOverlapConfirmation)
-{
-    <div class="modal-backdrop" @onclick="CancelOverlapConfirmation">
-        <div class="modal" @onclick:stopPropagation="true">
-            <div class="modal-header">
-                <h3 class="modal-title">⚠️ Overlapping Period Warning</h3>
-                <button class="modal-close" @onclick="CancelOverlapConfirmation">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p>The following allocations have overlapping periods:</p>
-                <div class="overlap-warning-list">
-                    @foreach (var warning in overlapWarnings)
-                    {
-                        <div class="overlap-warning-item">
-                            <strong>@warning.ProjectName</strong>
-                            @if (warning.IsNewPeriodLarger)
-                            {
-                                <p>
-                                    You are adding an allocation for <strong>@warning.NewPeriodName</strong> which contains
-                                    an existing allocation for <strong>@warning.ExistingPeriodName</strong>.
-                                </p>
-                                <p class="warning-note">
-                                    The resource will have allocations in both periods. The larger period (@warning.NewPeriodName)
-                                    will cascade to the child period, potentially causing over-allocation.
-                                </p>
-                            }
-                            else
-                            {
-                                <p>
-                                    You are adding an allocation for <strong>@warning.NewPeriodName</strong> which is within
-                                    an existing allocation for <strong>@warning.ExistingPeriodName</strong>.
-                                </p>
-                                <p class="warning-note">
-                                    The resource already has a base allocation in @warning.ExistingPeriodName that cascades to this period.
-                                </p>
-                            }
-                        </div>
-                    }
-                </div>
-                <p class="confirmation-question">Do you want to proceed with creating these allocations?</p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" @onclick="CancelOverlapConfirmation">Cancel</button>
-                <button class="btn btn-warning" @onclick="ConfirmOverlapAndSave">Proceed Anyway</button>
-            </div>
-        </div>
-    </div>
-}
+<style>
+    .date-filter {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .date-filter label {
+        font-size: 14px;
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+
+    .allocation-dates {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-left: 12px;
+    }
+
+    .overlap-badge {
+        font-size: 11px;
+        background: rgba(245, 158, 11, 0.2);
+        color: var(--warning);
+        padding: 2px 8px;
+        border-radius: 4px;
+        margin-left: 8px;
+    }
+
+    .allocation-item.has-overlap {
+        border-left: 3px solid var(--warning);
+        padding-left: 12px;
+    }
+
+    .form-row {
+        display: flex;
+        gap: 16px;
+    }
+
+    .form-group-half {
+        flex: 1;
+    }
+</style>
 
 @code {
     private List<Allocation> allocations = new();
     private List<Resource> resources = new();
     private List<Project> projects = new();
-    private List<Period> periods = new();
     private List<Role> roles = new();
 
     private string searchTerm = "";
-    private int selectedPeriodId = 0;
     private int selectedRoleId = 0;
+    private DateTime? filterStartDate;
+    private DateTime? filterEndDate;
     private HashSet<int> expandedResources = new();
 
     private bool showModal = false;
     private bool isEditing = false;
     private Allocation? currentAllocation;
     private string errorMessage = "";
+    private string successMessage = "";
+    private string? overlapWarningMessage;
 
     private int modalResourceId = 0;
     private int modalProjectId = 0;
-    private int modalPeriodId = 0;
+    private DateTime modalStartDate = DateTime.Today;
+    private DateTime modalEndDate = DateTime.Today.AddMonths(1);
     private int? modalPercentage;
     private bool showPercentageField = false;
-
-    // Multi-select for Add mode
-    private HashSet<int> selectedProjectIds = new();
-    private HashSet<int> selectedPeriodIds = new();
-    private string successMessage = "";
-
-    // Overlap confirmation
-    private bool showOverlapConfirmation = false;
-    private List<OverlapWarning> overlapWarnings = new();
-    private class OverlapWarning
-    {
-        public int ProjectId { get; set; }
-        public string ProjectName { get; set; } = "";
-        public int NewPeriodId { get; set; }
-        public string NewPeriodName { get; set; } = "";
-        public int ExistingPeriodId { get; set; }
-        public string ExistingPeriodName { get; set; } = "";
-        public bool IsNewPeriodLarger { get; set; }
-    }
 
     // Sorting
     private string sortColumn = "Resource";
@@ -529,9 +336,14 @@
             if (selectedRoleId > 0)
                 filtered = filtered.Where(r => r.RoleId == selectedRoleId);
 
-            // If period is selected, only show resources with allocations in that period
-            if (selectedPeriodId > 0)
-                filtered = filtered.Where(r => allocations.Any(a => a.ResourceId == r.Id && a.PeriodId == selectedPeriodId));
+            // If date range is specified, only show resources with allocations in that range
+            if (filterStartDate.HasValue && filterEndDate.HasValue)
+            {
+                filtered = filtered.Where(r => allocations.Any(a =>
+                    a.ResourceId == r.Id &&
+                    a.StartDate <= filterEndDate.Value &&
+                    a.EndDate >= filterStartDate.Value));
+            }
 
             return filtered;
         }
@@ -554,147 +366,84 @@
     private IEnumerable<Allocation> GetResourceAllocations(int resourceId)
     {
         var filtered = allocations.Where(a => a.ResourceId == resourceId);
-        if (selectedPeriodId > 0)
-            filtered = filtered.Where(a => a.PeriodId == selectedPeriodId);
+
+        if (filterStartDate.HasValue && filterEndDate.HasValue)
+        {
+            filtered = filtered.Where(a =>
+                a.StartDate <= filterEndDate.Value &&
+                a.EndDate >= filterStartDate.Value);
+        }
+
         return filtered;
     }
 
-    private int GetTotalAllocation(int resourceId)
+    private int GetMaxOverlapAllocation(int resourceId)
     {
-        var resourceAllocations = GetResourceAllocations(resourceId);
-        return resourceAllocations.Where(a => a.Percentage.HasValue).Sum(a => a.Percentage ?? 0);
+        var resourceAllocations = GetResourceAllocations(resourceId)
+            .Where(a => a.Percentage.HasValue)
+            .ToList();
+
+        if (!resourceAllocations.Any()) return 0;
+
+        // Find all date boundaries
+        var boundaries = new HashSet<DateTime>();
+        foreach (var alloc in resourceAllocations)
+        {
+            boundaries.Add(alloc.StartDate);
+            boundaries.Add(alloc.EndDate);
+        }
+
+        var sortedBoundaries = boundaries.OrderBy(d => d).ToList();
+        int maxTotal = 0;
+
+        // Calculate total allocation at each period between boundaries
+        for (int i = 0; i < sortedBoundaries.Count - 1; i++)
+        {
+            var periodStart = sortedBoundaries[i];
+            var periodEnd = sortedBoundaries[i + 1];
+            var midPoint = periodStart.AddDays((periodEnd - periodStart).TotalDays / 2);
+
+            var periodTotal = resourceAllocations
+                .Where(a => a.StartDate <= midPoint && a.EndDate >= midPoint)
+                .Sum(a => a.Percentage ?? 0);
+
+            if (periodTotal > maxTotal)
+                maxTotal = periodTotal;
+        }
+
+        return maxTotal;
     }
 
-    private int GetMaxPeriodAllocation(int resourceId)
+    private bool HasOverlappingDates(int resourceId)
     {
-        var resourceAllocations = GetResourceAllocations(resourceId);
-        var periodTotals = resourceAllocations
-            .GroupBy(a => a.PeriodId)
-            .Select(g => g.Where(a => a.Percentage.HasValue).Sum(a => a.Percentage ?? 0));
+        var resourceAllocations = GetResourceAllocations(resourceId).ToList();
 
-        return periodTotals.Any() ? periodTotals.Max() : 0;
+        for (int i = 0; i < resourceAllocations.Count; i++)
+        {
+            for (int j = i + 1; j < resourceAllocations.Count; j++)
+            {
+                var a1 = resourceAllocations[i];
+                var a2 = resourceAllocations[j];
+
+                // Check if date ranges overlap
+                if (a1.StartDate <= a2.EndDate && a1.EndDate >= a2.StartDate)
+                    return true;
+            }
+        }
+
+        return false;
     }
 
-    private bool HasOverlappingPeriodsForResource(int resourceId)
+    private int GetOverlappingAllocationsCount(Allocation allocation)
     {
-        var resourceAllocations = GetResourceAllocations(resourceId);
-        return HasOverlappingPeriods(resourceAllocations);
-    }
-
-    private int GetTotalAllocationExcluding(int resourceId, int periodId, int? excludeAllocationId)
-    {
-        var query = allocations.Where(a => a.ResourceId == resourceId && a.PeriodId == periodId && a.Percentage.HasValue);
-        if (excludeAllocationId.HasValue) query = query.Where(a => a.Id != excludeAllocationId.Value);
-        return query.Sum(a => a.Percentage ?? 0);
+        return allocations.Count(a =>
+            a.Id != allocation.Id &&
+            a.ResourceId == allocation.ResourceId &&
+            a.StartDate <= allocation.EndDate &&
+            a.EndDate >= allocation.StartDate);
     }
 
     private string GetAllocationClass(int total) => total > 100 ? "danger" : total >= 80 ? "warning" : "normal";
-
-    private bool HasOverlappingPeriods(IEnumerable<Allocation> resourceAllocations)
-    {
-        var allocatedPeriods = resourceAllocations.Select(a => a.Period).Distinct().ToList();
-
-        foreach (var period1 in allocatedPeriods)
-        {
-            foreach (var period2 in allocatedPeriods)
-            {
-                if (period1.Id != period2.Id && PeriodsOverlap(period1, period2))
-                {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private bool PeriodsOverlap(Period p1, Period p2)
-    {
-        // Check if one period contains another or they overlap
-        return (p1.StartDate <= p2.StartDate && p1.EndDate >= p2.EndDate) ||
-               (p2.StartDate <= p1.StartDate && p2.EndDate >= p1.EndDate) ||
-               (p1.StartDate <= p2.EndDate && p1.EndDate >= p2.StartDate);
-    }
-
-    private bool IsChildPeriod(Period period)
-    {
-        // A period is a "child" if it's a Month type or if there's a longer period that contains it
-        if (period.Type == ProjectManagement.Domain.Enums.PeriodType.Month)
-        {
-            return periods.Any(p => p.Id != period.Id &&
-                                    p.StartDate <= period.StartDate &&
-                                    p.EndDate >= period.EndDate);
-        }
-        return false;
-    }
-
-    private bool IsParentPeriod(Period period)
-    {
-        // A period is a "parent" if it contains other periods (e.g., Quarter contains Months)
-        return periods.Any(p => p.Id != period.Id &&
-                               period.StartDate <= p.StartDate &&
-                               period.EndDate >= p.EndDate);
-    }
-
-    private List<Period> GetChildPeriodsForResource(IEnumerable<Allocation> resourceAllocations)
-    {
-        // Get all periods that are children of any parent period the resource is allocated to
-        var parentPeriods = resourceAllocations
-            .Select(a => a.Period)
-            .Where(p => IsParentPeriod(p))
-            .Distinct()
-            .ToList();
-
-        var childPeriodIds = new HashSet<int>();
-
-        foreach (var parent in parentPeriods)
-        {
-            // Find all periods that fall within this parent
-            var children = periods.Where(p => p.Id != parent.Id &&
-                                              parent.StartDate <= p.StartDate &&
-                                              parent.EndDate >= p.EndDate);
-            foreach (var child in children)
-            {
-                childPeriodIds.Add(child.Id);
-            }
-        }
-
-        // Also include any periods the resource is directly allocated to that are children
-        foreach (var allocation in resourceAllocations)
-        {
-            if (IsChildPeriod(allocation.Period))
-            {
-                childPeriodIds.Add(allocation.PeriodId);
-            }
-        }
-
-        return periods.Where(p => childPeriodIds.Contains(p.Id)).ToList();
-    }
-
-    private List<Allocation> GetInheritedAllocations(IEnumerable<Allocation> resourceAllocations, Period childPeriod)
-    {
-        // Get allocations from parent periods that apply to this child period
-        return resourceAllocations
-            .Where(a => a.PeriodId != childPeriod.Id &&
-                       a.Period.StartDate <= childPeriod.StartDate &&
-                       a.Period.EndDate >= childPeriod.EndDate)
-            .ToList();
-    }
-
-    private string GetPeriodAllocationSummary(int resourceId, bool requiresCapacity)
-    {
-        if (!requiresCapacity) return "N/A";
-
-        var resourceAllocs = GetResourceAllocations(resourceId);
-        var periodTotals = resourceAllocs
-            .GroupBy(a => a.PeriodId)
-            .Select(g => g.Where(a => a.Percentage.HasValue).Sum(a => a.Percentage ?? 0))
-            .Where(t => t > 0);
-
-        if (!periodTotals.Any()) return "0%";
-
-        var max = periodTotals.Max();
-        return $"{max}% max";
-    }
 
     private void SetSort(string column)
     {
@@ -718,7 +467,6 @@
     {
         resources = await DbContext.Resources.Include(r => r.Role).OrderBy(r => r.Name).ToListAsync();
         projects = await DbContext.Projects.OrderBy(p => p.Name).ToListAsync();
-        periods = await DbContext.Periods.OrderBy(p => p.StartDate).ToListAsync();
         roles = await DbContext.Roles.OrderBy(r => r.Name).ToListAsync();
         await LoadAllocations();
     }
@@ -728,7 +476,6 @@
         allocations = await DbContext.Allocations
             .Include(a => a.Resource).ThenInclude(r => r.Role)
             .Include(a => a.Project)
-            .Include(a => a.Period)
             .ToListAsync();
     }
 
@@ -758,13 +505,13 @@
         currentAllocation = null;
         modalResourceId = 0;
         modalProjectId = 0;
-        modalPeriodId = 0;
+        modalStartDate = DateTime.Today;
+        modalEndDate = DateTime.Today.AddMonths(1);
         modalPercentage = null;
         showPercentageField = false;
-        selectedProjectIds.Clear();
-        selectedPeriodIds.Clear();
         errorMessage = "";
         successMessage = "";
+        overlapWarningMessage = null;
         isEditing = false;
         showModal = true;
     }
@@ -774,15 +521,13 @@
         currentAllocation = null;
         modalResourceId = resource.Id;
         modalProjectId = 0;
-        modalPeriodId = 0;
+        modalStartDate = DateTime.Today;
+        modalEndDate = DateTime.Today.AddMonths(1);
         modalPercentage = null;
         showPercentageField = resource.Role.RequiresCapacity;
-        selectedProjectIds.Clear();
-        selectedPeriodIds.Clear();
-        if (selectedPeriodId > 0)
-            selectedPeriodIds.Add(selectedPeriodId);
         errorMessage = "";
         successMessage = "";
+        overlapWarningMessage = null;
         isEditing = false;
         showModal = true;
     }
@@ -792,13 +537,13 @@
         currentAllocation = allocation;
         modalResourceId = allocation.ResourceId;
         modalProjectId = allocation.ProjectId;
-        modalPeriodId = allocation.PeriodId;
+        modalStartDate = allocation.StartDate;
+        modalEndDate = allocation.EndDate;
         modalPercentage = allocation.Percentage;
         showPercentageField = allocation.Resource.Role.RequiresCapacity;
-        selectedProjectIds.Clear();
-        selectedPeriodIds.Clear();
         errorMessage = "";
         successMessage = "";
+        overlapWarningMessage = null;
         isEditing = true;
         showModal = true;
     }
@@ -808,24 +553,7 @@
         showModal = false;
         errorMessage = "";
         successMessage = "";
-        selectedProjectIds.Clear();
-        selectedPeriodIds.Clear();
-    }
-
-    private void ToggleProjectSelection(int projectId)
-    {
-        if (selectedProjectIds.Contains(projectId))
-            selectedProjectIds.Remove(projectId);
-        else
-            selectedProjectIds.Add(projectId);
-    }
-
-    private void TogglePeriodSelection(int periodId)
-    {
-        if (selectedPeriodIds.Contains(periodId))
-            selectedPeriodIds.Remove(periodId);
-        else
-            selectedPeriodIds.Add(periodId);
+        overlapWarningMessage = null;
     }
 
     private void OnResourceChanged()
@@ -840,17 +568,25 @@
 
     private async Task SaveAllocation()
     {
-        await SaveAllocationInternal(skipOverlapCheck: false);
-    }
-
-    private async Task SaveAllocationInternal(bool skipOverlapCheck)
-    {
         errorMessage = "";
         successMessage = "";
+        overlapWarningMessage = null;
 
         if (modalResourceId == 0)
         {
             errorMessage = "Please select a resource.";
+            return;
+        }
+
+        if (modalProjectId == 0)
+        {
+            errorMessage = "Please select a project.";
+            return;
+        }
+
+        if (modalEndDate < modalStartDate)
+        {
+            errorMessage = "End date must be after start date.";
             return;
         }
 
@@ -863,60 +599,30 @@
             return;
         }
 
+        // Check if resource has end date and allocation extends beyond it
+        if (resource.EndDate.HasValue && modalEndDate > resource.EndDate.Value)
+        {
+            errorMessage = $"Allocation end date cannot exceed resource contract end date ({resource.EndDate.Value:MMM dd, yyyy}).";
+            return;
+        }
+
         if (isEditing && currentAllocation != null)
         {
-            // Edit mode - single allocation
-            if (modalProjectId == 0 || modalPeriodId == 0)
+            var result = await AllocationService.UpdateAllocationAsync(
+                currentAllocation.Id,
+                modalStartDate,
+                modalEndDate,
+                requiresCapacity ? modalPercentage : null);
+
+            if (!result.Success)
             {
-                errorMessage = "Please select a project and period.";
+                errorMessage = result.ErrorMessage ?? "Failed to update allocation.";
                 return;
             }
 
-            // Check if resource has end date and period starts after it
-            if (resource.EndDate.HasValue)
+            if (result.OverlappingPeriods?.Any() == true)
             {
-                var selectedPeriod = periods.First(p => p.Id == modalPeriodId);
-                if (selectedPeriod.StartDate > resource.EndDate.Value)
-                {
-                    errorMessage = $"Cannot allocate {resource.Name} to {selectedPeriod.Name}. Resource contract ends on {resource.EndDate.Value:MMM dd, yyyy}.";
-                    return;
-                }
-            }
-
-            // Check for overlapping periods when editing
-            if (!skipOverlapCheck)
-            {
-                var editOverlaps = CheckForOverlappingAllocations(
-                    modalResourceId,
-                    new HashSet<int> { modalProjectId },
-                    new HashSet<int> { modalPeriodId },
-                    currentAllocation.Id);
-
-                if (editOverlaps.Any())
-                {
-                    overlapWarnings = editOverlaps;
-                    showOverlapConfirmation = true;
-                    return;
-                }
-            }
-
-            if (requiresCapacity && modalPercentage.HasValue)
-            {
-                var currentTotal = GetTotalAllocationExcluding(modalResourceId, modalPeriodId, currentAllocation.Id);
-                if (currentTotal + modalPercentage.Value > 100)
-                {
-                    errorMessage = $"Cannot allocate {modalPercentage}%. Resource already has {currentTotal}% allocated. Maximum available: {100 - currentTotal}%";
-                    return;
-                }
-            }
-
-            var existing = await DbContext.Allocations.FindAsync(currentAllocation.Id);
-            if (existing != null)
-            {
-                existing.ProjectId = modalProjectId;
-                existing.PeriodId = modalPeriodId;
-                existing.Percentage = requiresCapacity ? modalPercentage : null;
-                await DbContext.SaveChangesAsync();
+                overlapWarningMessage = $"Warning: This allocation overlaps with {result.OverlappingPeriods.Count} other allocation(s).";
             }
 
             await LoadAllocations();
@@ -924,199 +630,51 @@
         }
         else
         {
-            // Add mode - multiple allocations
-            if (!selectedProjectIds.Any() || !selectedPeriodIds.Any())
+            // Check for duplicate allocation (same resource + project with overlapping dates)
+            var existingAllocation = allocations.FirstOrDefault(a =>
+                a.ResourceId == modalResourceId &&
+                a.ProjectId == modalProjectId &&
+                a.StartDate <= modalEndDate &&
+                a.EndDate >= modalStartDate);
+
+            if (existingAllocation != null)
             {
-                errorMessage = "Please select at least one project and one period.";
+                errorMessage = $"An allocation already exists for this resource and project that overlaps with the selected dates ({existingAllocation.StartDate:MMM dd} - {existingAllocation.EndDate:MMM dd}).";
                 return;
             }
 
-            // Check if resource has end date and any selected period starts after it
-            if (resource.EndDate.HasValue)
-            {
-                var invalidPeriods = periods
-                    .Where(p => selectedPeriodIds.Contains(p.Id) && p.StartDate > resource.EndDate.Value)
-                    .Select(p => p.Name)
-                    .ToList();
+            var result = await AllocationService.CreateAllocationAsync(
+                modalResourceId,
+                modalProjectId,
+                modalStartDate,
+                modalEndDate,
+                requiresCapacity ? modalPercentage : null);
 
-                if (invalidPeriods.Any())
-                {
-                    errorMessage = $"Cannot allocate {resource.Name} to: {string.Join(", ", invalidPeriods)}. Resource contract ends on {resource.EndDate.Value:MMM dd, yyyy}.";
-                    return;
-                }
+            if (!result.Success)
+            {
+                errorMessage = result.ErrorMessage ?? "Failed to create allocation.";
+                return;
             }
 
-            // Check for overlapping periods before creating
-            if (!skipOverlapCheck)
+            if (result.OverlappingPeriods?.Any() == true)
             {
-                var overlaps = CheckForOverlappingAllocations(modalResourceId, selectedProjectIds, selectedPeriodIds, null);
-                if (overlaps.Any())
-                {
-                    overlapWarnings = overlaps;
-                    showOverlapConfirmation = true;
-                    return;
-                }
+                overlapWarningMessage = $"Allocation created. Note: This overlaps with {result.OverlappingPeriods.Count} other allocation(s).";
             }
 
-            var created = 0;
-            var skipped = 0;
-            var errors = new List<string>();
+            await LoadAllocations();
+            expandedResources.Add(modalResourceId);
+            successMessage = "Allocation created successfully.";
 
-            foreach (var projectId in selectedProjectIds)
-            {
-                foreach (var periodId in selectedPeriodIds)
-                {
-                    // Check if allocation already exists (same resource + project + period)
-                    var existingAllocation = await DbContext.Allocations
-                        .FirstOrDefaultAsync(a => a.ResourceId == modalResourceId &&
-                                                  a.ProjectId == projectId &&
-                                                  a.PeriodId == periodId);
-
-                    if (existingAllocation != null)
-                    {
-                        skipped++;
-                        continue;
-                    }
-
-                    // Check capacity for this period if required
-                    if (requiresCapacity && modalPercentage.HasValue)
-                    {
-                        var currentTotal = GetTotalAllocationExcluding(modalResourceId, periodId, null);
-                        if (currentTotal + modalPercentage.Value > 100)
-                        {
-                            var periodName = periods.First(p => p.Id == periodId).Name;
-                            errors.Add($"{periodName}: Would exceed 100% ({currentTotal}% + {modalPercentage}%)");
-                            continue;
-                        }
-                    }
-
-                    var newAllocation = new Allocation
-                    {
-                        ResourceId = modalResourceId,
-                        ProjectId = projectId,
-                        PeriodId = periodId,
-                        Percentage = requiresCapacity ? modalPercentage : null
-                    };
-                    DbContext.Allocations.Add(newAllocation);
-                    created++;
-                }
-            }
-
-            if (created > 0)
-            {
-                await DbContext.SaveChangesAsync();
-                await LoadAllocations();
-            }
-
-            if (errors.Any())
-            {
-                errorMessage = $"Some allocations skipped due to capacity limits:\n{string.Join("; ", errors)}";
-            }
-
-            if (created > 0)
-            {
-                successMessage = $"Successfully created {created} allocation(s).";
-                if (skipped > 0)
-                {
-                    successMessage += $" {skipped} duplicate(s) skipped.";
-                }
-
-                // Keep modal open to show success, clear selections for more
-                selectedProjectIds.Clear();
-                selectedPeriodIds.Clear();
-
-                // Expand the resource to show new allocations
-                expandedResources.Add(modalResourceId);
-            }
-            else if (skipped > 0)
-            {
-                errorMessage = $"All {skipped} allocation(s) already exist.";
-            }
+            // Reset for another allocation
+            modalProjectId = 0;
+            modalStartDate = DateTime.Today;
+            modalEndDate = DateTime.Today.AddMonths(1);
         }
-    }
-
-    private List<OverlapWarning> CheckForOverlappingAllocations(int resourceId, HashSet<int> projectIds, HashSet<int> periodIds, int? excludeAllocationId)
-    {
-        var warnings = new List<OverlapWarning>();
-        var resourceAllocations = allocations.Where(a => a.ResourceId == resourceId);
-
-        if (excludeAllocationId.HasValue)
-        {
-            resourceAllocations = resourceAllocations.Where(a => a.Id != excludeAllocationId.Value);
-        }
-
-        foreach (var projectId in projectIds)
-        {
-            // Get existing allocations for this resource and project
-            var existingForProject = resourceAllocations
-                .Where(a => a.ProjectId == projectId)
-                .ToList();
-
-            if (!existingForProject.Any()) continue;
-
-            foreach (var newPeriodId in periodIds)
-            {
-                var newPeriod = periods.First(p => p.Id == newPeriodId);
-
-                foreach (var existingAlloc in existingForProject)
-                {
-                    var existingPeriod = existingAlloc.Period;
-
-                    // Check if periods overlap (one contains the other)
-                    bool newContainsExisting = newPeriod.StartDate <= existingPeriod.StartDate &&
-                                               newPeriod.EndDate >= existingPeriod.EndDate &&
-                                               newPeriod.Id != existingPeriod.Id;
-
-                    bool existingContainsNew = existingPeriod.StartDate <= newPeriod.StartDate &&
-                                               existingPeriod.EndDate >= newPeriod.EndDate &&
-                                               existingPeriod.Id != newPeriod.Id;
-
-                    if (newContainsExisting || existingContainsNew)
-                    {
-                        // Only add warning if not already present for this project/period combo
-                        var alreadyWarned = warnings.Any(w =>
-                            w.ProjectId == projectId &&
-                            w.NewPeriodId == newPeriodId &&
-                            w.ExistingPeriodId == existingPeriod.Id);
-
-                        if (!alreadyWarned)
-                        {
-                            warnings.Add(new OverlapWarning
-                            {
-                                ProjectId = projectId,
-                                ProjectName = projects.First(p => p.Id == projectId).Name,
-                                NewPeriodId = newPeriodId,
-                                NewPeriodName = newPeriod.Name,
-                                ExistingPeriodId = existingPeriod.Id,
-                                ExistingPeriodName = existingPeriod.Name,
-                                IsNewPeriodLarger = newContainsExisting
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        return warnings;
-    }
-
-    private void CancelOverlapConfirmation()
-    {
-        showOverlapConfirmation = false;
-        overlapWarnings.Clear();
-    }
-
-    private async Task ConfirmOverlapAndSave()
-    {
-        showOverlapConfirmation = false;
-        overlapWarnings.Clear();
-        await SaveAllocationInternal(skipOverlapCheck: true);
     }
 
     private async Task DeleteAllocation(Allocation allocation)
     {
-        DbContext.Allocations.Remove(allocation);
-        await DbContext.SaveChangesAsync();
+        await AllocationService.DeleteAllocationAsync(allocation.Id);
         await LoadAllocations();
     }
 }
