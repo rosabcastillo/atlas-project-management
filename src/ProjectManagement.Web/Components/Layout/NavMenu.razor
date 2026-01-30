@@ -1,0 +1,74 @@
+@using Microsoft.AspNetCore.Components.Routing
+
+<div class="logo">
+    <div class="logo-icon">PM</div>
+    <span class="logo-text">Project Manager</span>
+</div>
+
+<nav>
+    <div class="nav-section">
+        <div class="nav-section-title">Main</div>
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">Dashboard</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="projects">
+                    <span class="nav-icon">📁</span>
+                    <span class="nav-text">Projects</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="allocations">
+                    <span class="nav-icon">📅</span>
+                    <span class="nav-text">Allocations</span>
+                </NavLink>
+            </li>
+        </ul>
+    </div>
+
+    <div class="nav-section">
+        <div class="nav-section-title">Configuration</div>
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <NavLink class="nav-link" href="resources">
+                    <span class="nav-icon">👥</span>
+                    <span class="nav-text">Resources</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="settings/vendors">
+                    <span class="nav-icon">🏢</span>
+                    <span class="nav-text">Vendors</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="settings/roles">
+                    <span class="nav-icon">🎭</span>
+                    <span class="nav-text">Roles</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="settings/skills">
+                    <span class="nav-icon">🛠️</span>
+                    <span class="nav-text">Skills</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="settings/statuses">
+                    <span class="nav-icon">🏷️</span>
+                    <span class="nav-text">Statuses</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="settings/periods">
+                    <span class="nav-icon">📆</span>
+                    <span class="nav-text">Periods</span>
+                </NavLink>
+            </li>
+        </ul>
+    </div>
+</nav>

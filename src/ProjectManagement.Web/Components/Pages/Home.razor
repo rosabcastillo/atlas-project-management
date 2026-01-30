@@ -1,0 +1,178 @@
+@page "/"
+@using Microsoft.EntityFrameworkCore
+@using ProjectManagement.Infrastructure.Data
+@inject AppDbContext DbContext
+@rendermode InteractiveServer
+
+<PageTitle>Dashboard - Project Management</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-subtitle">Overview of your project and resource allocations</p>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon purple">📁</div>
+        <div class="stat-content">
+            <div class="stat-value">@projectCount</div>
+            <div class="stat-label">Total Projects</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">👥</div>
+        <div class="stat-content">
+            <div class="stat-value">@resourceCount</div>
+            <div class="stat-label">Total Resources</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">📅</div>
+        <div class="stat-content">
+            <div class="stat-value">@allocationCount</div>
+            <div class="stat-label">Active Allocations</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">⚠️</div>
+        <div class="stat-content">
+            <div class="stat-value">@overAllocatedCount</div>
+            <div class="stat-label">Over-allocated</div>
+        </div>
+    </div>
+</div>
+
+<div class="glass-card">
+    <div class="glass-card-header">
+        <h3 class="glass-card-title">Resources by Role</h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Role</th>
+                    <th>Count</th>
+                    <th>Requires Capacity</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in resourcesByRole)
+                {
+                    <tr>
+                        <td><strong>@item.RoleName</strong></td>
+                        <td>@item.Count</td>
+                        <td>
+                            @if (item.RequiresCapacity)
+                            {
+                                <span class="badge badge-primary">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-secondary">No</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="glass-card">
+    <div class="glass-card-header">
+        <h3 class="glass-card-title">Recent Projects</h3>
+        <a href="projects" class="btn btn-secondary btn-sm">View All</a>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Project Name</th>
+                    <th>Accountable Lead</th>
+                    <th>Delivery Method</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var project in recentProjects)
+                {
+                    <tr>
+                        <td><strong>@project.Name</strong></td>
+                        <td>@(project.AccountableLead ?? "-")</td>
+                        <td>
+                            @if (project.DeliveryMethod.HasValue)
+                            {
+                                <span class="badge badge-primary">@project.DeliveryMethod</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-secondary">Not set</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private int projectCount;
+    private int resourceCount;
+    private int allocationCount;
+    private int overAllocatedCount;
+    private List<ResourceByRole> resourcesByRole = new();
+    private List<ProjectManagement.Domain.Entities.Project> recentProjects = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        projectCount = await DbContext.Projects.CountAsync();
+        resourceCount = await DbContext.Resources.CountAsync();
+        allocationCount = await DbContext.Allocations.CountAsync();
+
+        resourcesByRole = await DbContext.Roles
+            .Select(r => new ResourceByRole
+            {
+                RoleName = r.Name,
+                Count = r.Resources.Count,
+                RequiresCapacity = r.RequiresCapacity
+            })
+            .ToListAsync();
+
+        recentProjects = await DbContext.Projects
+            .OrderByDescending(p => p.CreatedAt)
+            .Take(5)
+            .ToListAsync();
+
+        // Calculate over-allocated (resources with >100% allocation in any period)
+        var resourcesWithCapacity = await DbContext.Resources
+            .Include(r => r.Role)
+            .Include(r => r.Allocations)
+            .Where(r => r.Role.RequiresCapacity)
+            .ToListAsync();
+
+        var periods = await DbContext.Periods.ToListAsync();
+        foreach (var resource in resourcesWithCapacity)
+        {
+            foreach (var period in periods)
+            {
+                var total = resource.Allocations
+                    .Where(a => a.PeriodId == period.Id && a.Percentage.HasValue)
+                    .Sum(a => a.Percentage ?? 0);
+                if (total > 100)
+                {
+                    overAllocatedCount++;
+                    break;
+                }
+            }
+        }
+    }
+
+    private class ResourceByRole
+    {
+        public string RoleName { get; set; } = "";
+        public int Count { get; set; }
+        public bool RequiresCapacity { get; set; }
+    }
+}

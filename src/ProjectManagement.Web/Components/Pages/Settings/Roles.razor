@@ -1,0 +1,215 @@
+@page "/settings/roles"
+@using Microsoft.EntityFrameworkCore
+@using ProjectManagement.Infrastructure.Data
+@using ProjectManagement.Domain.Entities
+@inject AppDbContext DbContext
+@rendermode InteractiveServer
+
+<PageTitle>Roles - Settings</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Roles</h1>
+        <p class="page-subtitle">Manage resource roles and capacity requirements</p>
+    </div>
+    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Role</button>
+</div>
+
+<div class="glass-card">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")'>Role Name</th>
+                    <th class="sortable @(GetSortClass("Capacity"))" @onclick='() => SetSort("Capacity")'>Requires Capacity</th>
+                    <th class="sortable @(GetSortClass("Resources"))" @onclick='() => SetSort("Resources")'>Resources</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var role in PagedRoles)
+                {
+                    <tr>
+                        <td><strong>@role.Name</strong></td>
+                        <td>
+                            @if (role.RequiresCapacity)
+                            {
+                                <span class="badge badge-primary">Yes (tracked at 100%)</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-secondary">No</span>
+                            }
+                        </td>
+                        <td>@role.Resources.Count</td>
+                        <td>
+                            <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(role)">Edit</button>
+                            @if (role.Resources.Count == 0)
+                            {
+                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteRole(role)">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (TotalPages > 1)
+    {
+        <div class="pagination">
+            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(1)">First</button>
+            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)">Prev</button>
+            @foreach (var pageNum in GetPageNumbers())
+            {
+                <button class="pagination-btn @(pageNum == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">@pageNum</button>
+            }
+            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(currentPage + 1)">Next</button>
+            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)">Last</button>
+            <span class="pagination-info">Showing @(((currentPage - 1) * pageSize) + 1)-@(Math.Min(currentPage * pageSize, TotalCount)) of @TotalCount</span>
+        </div>
+    }
+</div>
+
+@if (showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3 class="modal-title">@(isEditing ? "Edit Role" : "Add Role")</h3>
+                <button class="modal-close" @onclick="CloseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Role Name *</label>
+                    <input type="text" class="form-control" @bind="currentRole.Name" />
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="requiresCapacity" @bind="currentRole.RequiresCapacity" />
+                        <label for="requiresCapacity">Requires Capacity Tracking (100% limit)</label>
+                    </div>
+                    <p class="page-subtitle" style="margin-top: 0.5rem; font-size: 0.75rem;">
+                        Enable this for roles like Developer and QA where allocation should not exceed 100%.
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveRole">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Role> roles = new();
+    private bool showModal = false;
+    private bool isEditing = false;
+    private Role currentRole = new();
+
+    // Pagination & Sorting
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private string sortColumn = "Name";
+    private bool sortAscending = true;
+
+    private IEnumerable<Role> SortedRoles
+    {
+        get
+        {
+            return sortColumn switch
+            {
+                "Name" => sortAscending ? roles.OrderBy(r => r.Name) : roles.OrderByDescending(r => r.Name),
+                "Capacity" => sortAscending ? roles.OrderBy(r => r.RequiresCapacity) : roles.OrderByDescending(r => r.RequiresCapacity),
+                "Resources" => sortAscending ? roles.OrderBy(r => r.Resources.Count) : roles.OrderByDescending(r => r.Resources.Count),
+                _ => roles.OrderBy(r => r.Name)
+            };
+        }
+    }
+
+    private IEnumerable<Role> PagedRoles => SortedRoles.Skip((currentPage - 1) * pageSize).Take(pageSize);
+    private int TotalCount => roles.Count;
+    private int TotalPages => (int)Math.Ceiling(TotalCount / (double)pageSize);
+
+    private void GoToPage(int pg) => currentPage = Math.Max(1, Math.Min(pg, TotalPages));
+
+    private void SetSort(string column)
+    {
+        if (sortColumn == column)
+            sortAscending = !sortAscending;
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+        currentPage = 1;
+    }
+
+    private string GetSortClass(string column) => sortColumn == column ? (sortAscending ? "asc" : "desc") : "";
+
+    private IEnumerable<int> GetPageNumbers()
+    {
+        var start = Math.Max(1, currentPage - 2);
+        var end = Math.Min(TotalPages, currentPage + 2);
+        if (end - start < 4) { if (start == 1) end = Math.Min(TotalPages, start + 4); else start = Math.Max(1, end - 4); }
+        return Enumerable.Range(start, end - start + 1);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoles();
+    }
+
+    private async Task LoadRoles()
+    {
+        roles = await DbContext.Roles.Include(r => r.Resources).OrderBy(r => r.Name).ToListAsync();
+    }
+
+    private void OpenAddModal()
+    {
+        currentRole = new Role();
+        isEditing = false;
+        showModal = true;
+    }
+
+    private void OpenEditModal(Role role)
+    {
+        currentRole = new Role { Id = role.Id, Name = role.Name, RequiresCapacity = role.RequiresCapacity };
+        isEditing = true;
+        showModal = true;
+    }
+
+    private void CloseModal() => showModal = false;
+
+    private async Task SaveRole()
+    {
+        if (string.IsNullOrWhiteSpace(currentRole.Name)) return;
+
+        if (isEditing)
+        {
+            var existing = await DbContext.Roles.FindAsync(currentRole.Id);
+            if (existing != null)
+            {
+                existing.Name = currentRole.Name;
+                existing.RequiresCapacity = currentRole.RequiresCapacity;
+                await DbContext.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            DbContext.Roles.Add(currentRole);
+            await DbContext.SaveChangesAsync();
+        }
+
+        await LoadRoles();
+        CloseModal();
+    }
+
+    private async Task DeleteRole(Role role)
+    {
+        DbContext.Roles.Remove(role);
+        await DbContext.SaveChangesAsync();
+        await LoadRoles();
+    }
+}

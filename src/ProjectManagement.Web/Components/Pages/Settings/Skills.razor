@@ -1,0 +1,156 @@
+@page "/settings/skills"
+@using Microsoft.EntityFrameworkCore
+@using ProjectManagement.Infrastructure.Data
+@using ProjectManagement.Domain.Entities
+@inject AppDbContext DbContext
+@rendermode InteractiveServer
+
+<PageTitle>Skills - Settings</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Skills</h1>
+        <p class="page-subtitle">Manage technical skills and competencies</p>
+    </div>
+    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Skill</button>
+</div>
+
+<div class="glass-card">
+    <div class="action-bar">
+        <div class="action-bar-left">
+            <div class="search-box">
+                <input type="text" class="form-control" placeholder="Search skills..." @bind="searchTerm" @bind:event="oninput" />
+            </div>
+        </div>
+    </div>
+
+    <div class="skill-tags" style="gap: 0.75rem; padding: 1rem 0;">
+        @foreach (var skill in FilteredSkills)
+        {
+            <div class="skill-tag" style="font-size: 0.875rem; padding: 0.5rem 1rem; position: relative;">
+                @skill.Name
+                <span style="margin-left: 0.5rem; opacity: 0.6;">(@skill.ResourceSkills.Count)</span>
+                <button style="background: none; border: none; margin-left: 0.5rem; cursor: pointer; color: inherit; opacity: 0.6;"
+                        @onclick="() => OpenEditModal(skill)" title="Edit">
+                    ✏️
+                </button>
+                @if (skill.ResourceSkills.Count == 0)
+                {
+                    <button style="background: none; border: none; cursor: pointer; color: inherit; opacity: 0.6;"
+                            @onclick="() => DeleteSkill(skill)" title="Delete">
+                        ❌
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (!FilteredSkills.Any())
+    {
+        <div class="empty-state">
+            <div class="empty-state-icon">🛠️</div>
+            <p>No skills found. Add a new skill to get started.</p>
+        </div>
+    }
+</div>
+
+@if (showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3 class="modal-title">@(isEditing ? "Edit Skill" : "Add Skill")</h3>
+                <button class="modal-close" @onclick="CloseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Skill Name *</label>
+                    <input type="text" class="form-control" @bind="currentSkill.Name" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveSkill">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Skill> skills = new();
+    private string searchTerm = "";
+    private bool showModal = false;
+    private bool isEditing = false;
+    private Skill currentSkill = new();
+
+    private IEnumerable<Skill> FilteredSkills => string.IsNullOrWhiteSpace(searchTerm)
+        ? skills
+        : skills.Where(s => s.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSkills();
+    }
+
+    private async Task LoadSkills()
+    {
+        skills = await DbContext.Skills
+            .Include(s => s.ResourceSkills)
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+    }
+
+    private void OpenAddModal()
+    {
+        currentSkill = new Skill();
+        isEditing = false;
+        showModal = true;
+    }
+
+    private void OpenEditModal(Skill skill)
+    {
+        currentSkill = new Skill
+        {
+            Id = skill.Id,
+            Name = skill.Name
+        };
+        isEditing = true;
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+    }
+
+    private async Task SaveSkill()
+    {
+        if (string.IsNullOrWhiteSpace(currentSkill.Name))
+            return;
+
+        if (isEditing)
+        {
+            var existing = await DbContext.Skills.FindAsync(currentSkill.Id);
+            if (existing != null)
+            {
+                existing.Name = currentSkill.Name;
+                await DbContext.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            DbContext.Skills.Add(currentSkill);
+            await DbContext.SaveChangesAsync();
+        }
+
+        await LoadSkills();
+        CloseModal();
+    }
+
+    private async Task DeleteSkill(Skill skill)
+    {
+        DbContext.Skills.Remove(skill);
+        await DbContext.SaveChangesAsync();
+        await LoadSkills();
+    }
+}

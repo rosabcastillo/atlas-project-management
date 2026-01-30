@@ -1,0 +1,227 @@
+@page "/settings/periods"
+@using Microsoft.EntityFrameworkCore
+@using ProjectManagement.Infrastructure.Data
+@using ProjectManagement.Domain.Entities
+@using ProjectManagement.Domain.Enums
+@inject AppDbContext DbContext
+@rendermode InteractiveServer
+
+<PageTitle>Periods - Settings</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Periods</h1>
+        <p class="page-subtitle">Manage time periods for resource allocation</p>
+    </div>
+    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Period</button>
+</div>
+
+<div class="glass-card">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")'>Period Name</th>
+                    <th class="sortable @(GetSortClass("Type"))" @onclick='() => SetSort("Type")'>Type</th>
+                    <th class="sortable @(GetSortClass("Start"))" @onclick='() => SetSort("Start")'>Start Date</th>
+                    <th class="sortable @(GetSortClass("End"))" @onclick='() => SetSort("End")'>End Date</th>
+                    <th class="sortable @(GetSortClass("Allocations"))" @onclick='() => SetSort("Allocations")'>Allocations</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var period in PagedPeriods)
+                {
+                    <tr>
+                        <td><strong>@period.Name</strong></td>
+                        <td><span class="badge badge-primary">@period.Type</span></td>
+                        <td>@period.StartDate.ToString("MMM dd, yyyy")</td>
+                        <td>@period.EndDate.ToString("MMM dd, yyyy")</td>
+                        <td>@period.Allocations.Count</td>
+                        <td>
+                            <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(period)">Edit</button>
+                            @if (period.Allocations.Count == 0)
+                            {
+                                <button class="btn btn-danger btn-sm" @onclick="() => DeletePeriod(period)">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (TotalPages > 1)
+    {
+        <div class="pagination">
+            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(1)">First</button>
+            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)">Prev</button>
+            @foreach (var pageNum in GetPageNumbers())
+            {
+                <button class="pagination-btn @(pageNum == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">@pageNum</button>
+            }
+            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(currentPage + 1)">Next</button>
+            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)">Last</button>
+            <span class="pagination-info">Showing @(((currentPage - 1) * pageSize) + 1)-@(Math.Min(currentPage * pageSize, TotalCount)) of @TotalCount</span>
+        </div>
+    }
+</div>
+
+@if (showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3 class="modal-title">@(isEditing ? "Edit Period" : "Add Period")</h3>
+                <button class="modal-close" @onclick="CloseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Period Name *</label>
+                    <input type="text" class="form-control" @bind="currentPeriod.Name" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Type *</label>
+                    <select class="form-control" @bind="selectedPeriodType">
+                        <option value="Month">Month</option>
+                        <option value="Quarter">Quarter</option>
+                        <option value="Custom">Custom</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Start Date *</label>
+                    <input type="date" class="form-control" @bind="currentPeriod.StartDate" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">End Date *</label>
+                    <input type="date" class="form-control" @bind="currentPeriod.EndDate" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="SavePeriod">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Period> periods = new();
+    private bool showModal = false;
+    private bool isEditing = false;
+    private Period currentPeriod = new();
+    private string selectedPeriodType = "Month";
+
+    // Pagination & Sorting
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private string sortColumn = "Start";
+    private bool sortAscending = true;
+
+    private IEnumerable<Period> SortedPeriods
+    {
+        get
+        {
+            return sortColumn switch
+            {
+                "Name" => sortAscending ? periods.OrderBy(p => p.Name) : periods.OrderByDescending(p => p.Name),
+                "Type" => sortAscending ? periods.OrderBy(p => p.Type) : periods.OrderByDescending(p => p.Type),
+                "Start" => sortAscending ? periods.OrderBy(p => p.StartDate) : periods.OrderByDescending(p => p.StartDate),
+                "End" => sortAscending ? periods.OrderBy(p => p.EndDate) : periods.OrderByDescending(p => p.EndDate),
+                "Allocations" => sortAscending ? periods.OrderBy(p => p.Allocations.Count) : periods.OrderByDescending(p => p.Allocations.Count),
+                _ => periods.OrderBy(p => p.StartDate)
+            };
+        }
+    }
+
+    private IEnumerable<Period> PagedPeriods => SortedPeriods.Skip((currentPage - 1) * pageSize).Take(pageSize);
+    private int TotalCount => periods.Count;
+    private int TotalPages => (int)Math.Ceiling(TotalCount / (double)pageSize);
+
+    private void GoToPage(int pg) => currentPage = Math.Max(1, Math.Min(pg, TotalPages));
+
+    private void SetSort(string column)
+    {
+        if (sortColumn == column)
+            sortAscending = !sortAscending;
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+        currentPage = 1;
+    }
+
+    private string GetSortClass(string column) => sortColumn == column ? (sortAscending ? "asc" : "desc") : "";
+
+    private IEnumerable<int> GetPageNumbers()
+    {
+        var start = Math.Max(1, currentPage - 2);
+        var end = Math.Min(TotalPages, currentPage + 2);
+        if (end - start < 4) { if (start == 1) end = Math.Min(TotalPages, start + 4); else start = Math.Max(1, end - 4); }
+        return Enumerable.Range(start, end - start + 1);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPeriods();
+    }
+
+    private async Task LoadPeriods()
+    {
+        periods = await DbContext.Periods.Include(p => p.Allocations).OrderBy(p => p.StartDate).ToListAsync();
+    }
+
+    private void OpenAddModal()
+    {
+        currentPeriod = new Period { StartDate = DateTime.Today, EndDate = DateTime.Today.AddMonths(1).AddDays(-1) };
+        selectedPeriodType = "Month";
+        isEditing = false;
+        showModal = true;
+    }
+
+    private void OpenEditModal(Period period)
+    {
+        currentPeriod = new Period { Id = period.Id, Name = period.Name, Type = period.Type, StartDate = period.StartDate, EndDate = period.EndDate };
+        selectedPeriodType = period.Type.ToString();
+        isEditing = true;
+        showModal = true;
+    }
+
+    private void CloseModal() => showModal = false;
+
+    private async Task SavePeriod()
+    {
+        if (string.IsNullOrWhiteSpace(currentPeriod.Name)) return;
+
+        currentPeriod.Type = Enum.Parse<PeriodType>(selectedPeriodType);
+
+        if (isEditing)
+        {
+            var existing = await DbContext.Periods.FindAsync(currentPeriod.Id);
+            if (existing != null)
+            {
+                existing.Name = currentPeriod.Name;
+                existing.Type = currentPeriod.Type;
+                existing.StartDate = currentPeriod.StartDate;
+                existing.EndDate = currentPeriod.EndDate;
+                await DbContext.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            DbContext.Periods.Add(currentPeriod);
+            await DbContext.SaveChangesAsync();
+        }
+
+        await LoadPeriods();
+        CloseModal();
+    }
+
+    private async Task DeletePeriod(Period period)
+    {
+        DbContext.Periods.Remove(period);
+        await DbContext.SaveChangesAsync();
+        await LoadPeriods();
+    }
+}

@@ -1,0 +1,351 @@
+@page "/resources"
+@using Microsoft.EntityFrameworkCore
+@using ProjectManagement.Infrastructure.Data
+@using ProjectManagement.Domain.Entities
+@inject AppDbContext DbContext
+@rendermode InteractiveServer
+
+<PageTitle>Resources - Project Management</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Resources</h1>
+        <p class="page-subtitle">Manage your team members and their skills</p>
+    </div>
+    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Resource</button>
+</div>
+
+<div class="glass-card">
+    <div class="action-bar">
+        <div class="action-bar-left">
+            <div class="search-box">
+                <input type="text" class="form-control" placeholder="Search resources..." @bind="searchTerm" @bind:event="oninput" @bind:after="ResetPage" />
+            </div>
+            <select class="form-control" style="width: auto;" @bind="filterRoleId" @bind:after="ResetPage">
+                <option value="0">All Roles</option>
+                @foreach (var role in roles)
+                {
+                    <option value="@role.Id">@role.Name</option>
+                }
+            </select>
+            <select class="form-control" style="width: auto;" @bind="filterVendorId" @bind:after="ResetPage">
+                <option value="0">All Vendors</option>
+                <option value="-1">No Vendor</option>
+                @foreach (var vendor in vendors)
+                {
+                    <option value="@vendor.Id">@vendor.Name</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")'>Name</th>
+                    <th class="sortable @(GetSortClass("Role"))" @onclick='() => SetSort("Role")'>Role</th>
+                    <th class="sortable @(GetSortClass("Vendor"))" @onclick='() => SetSort("Vendor")'>Vendor</th>
+                    <th>Skills</th>
+                    <th class="sortable @(GetSortClass("EndDate"))" @onclick='() => SetSort("EndDate")'>End Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var resource in PagedResources)
+                {
+                    var isTerminated = resource.EndDate.HasValue && resource.EndDate.Value < DateTime.Today;
+                    <tr class="@(isTerminated ? "row-terminated" : "")">
+                        <td>
+                            <strong>@resource.Name</strong>
+                            @if (isTerminated)
+                            {
+                                <span class="badge badge-danger badge-sm" style="margin-left: 0.5rem;">Terminated</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge @(resource.Role.RequiresCapacity ? "badge-primary" : "badge-secondary")">
+                                @resource.Role.Name
+                            </span>
+                        </td>
+                        <td>@(resource.Vendor?.Name ?? "-")</td>
+                        <td>
+                            <div class="skill-tags">
+                                @foreach (var rs in resource.ResourceSkills.Take(3))
+                                {
+                                    <span class="skill-tag">@rs.Skill.Name</span>
+                                }
+                                @if (resource.ResourceSkills.Count > 3)
+                                {
+                                    <span class="skill-tag">+@(resource.ResourceSkills.Count - 3)</span>
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            @if (resource.EndDate.HasValue)
+                            {
+                                <span class="@(isTerminated ? "text-danger" : "")">@resource.EndDate.Value.ToString("MMM dd, yyyy")</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(resource)">Edit</button>
+                            <button class="btn btn-danger btn-sm" @onclick="() => DeleteResource(resource)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (TotalPages > 1)
+    {
+        <div class="pagination">
+            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(1)">First</button>
+            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)">Prev</button>
+            @foreach (var pageNum in GetPageNumbers())
+            {
+                <button class="pagination-btn @(pageNum == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">@pageNum</button>
+            }
+            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(currentPage + 1)">Next</button>
+            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)">Last</button>
+            <span class="pagination-info">Showing @(((currentPage - 1) * pageSize) + 1)-@(Math.Min(currentPage * pageSize, TotalCount)) of @TotalCount</span>
+        </div>
+    }
+</div>
+
+@if (showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3 class="modal-title">@(isEditing ? "Edit Resource" : "Add Resource")</h3>
+                <button class="modal-close" @onclick="CloseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Name *</label>
+                    <input type="text" class="form-control" @bind="currentResource.Name" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Role *</label>
+                    <select class="form-control" @bind="selectedRoleId">
+                        <option value="0">Select a role...</option>
+                        @foreach (var role in roles)
+                        {
+                            <option value="@role.Id">@role.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Vendor</label>
+                    <select class="form-control" @bind="selectedVendorId">
+                        <option value="0">None</option>
+                        @foreach (var vendor in vendors)
+                        {
+                            <option value="@vendor.Id">@vendor.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">End Date</label>
+                    <input type="date" class="form-control" @bind="currentResource.EndDate" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Skills</label>
+                    <div class="skill-tags" style="gap: 0.5rem;">
+                        @foreach (var skill in skills)
+                        {
+                            <span class="skill-tag @(selectedSkillIds.Contains(skill.Id) ? "selected" : "")"
+                                  @onclick="() => ToggleSkill(skill.Id)">
+                                @skill.Name
+                            </span>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveResource">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Resource> resources = new();
+    private List<Role> roles = new();
+    private List<Vendor> vendors = new();
+    private List<Skill> skills = new();
+    private string searchTerm = "";
+    private int filterRoleId = 0;
+    private int filterVendorId = 0;
+    private bool showModal = false;
+    private bool isEditing = false;
+    private Resource currentResource = new();
+    private int selectedRoleId = 0;
+    private int selectedVendorId = 0;
+    private HashSet<int> selectedSkillIds = new();
+
+    // Pagination & Sorting
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private string sortColumn = "Name";
+    private bool sortAscending = true;
+
+    private IEnumerable<Resource> FilteredResources
+    {
+        get
+        {
+            var filtered = resources.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+                filtered = filtered.Where(r => r.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+
+            if (filterRoleId > 0)
+                filtered = filtered.Where(r => r.RoleId == filterRoleId);
+
+            if (filterVendorId == -1)
+                filtered = filtered.Where(r => r.VendorId == null);
+            else if (filterVendorId > 0)
+                filtered = filtered.Where(r => r.VendorId == filterVendorId);
+
+            return filtered;
+        }
+    }
+
+    private IEnumerable<Resource> SortedResources
+    {
+        get
+        {
+            var data = FilteredResources;
+            return sortColumn switch
+            {
+                "Name" => sortAscending ? data.OrderBy(r => r.Name) : data.OrderByDescending(r => r.Name),
+                "Role" => sortAscending ? data.OrderBy(r => r.Role.Name) : data.OrderByDescending(r => r.Role.Name),
+                "Vendor" => sortAscending ? data.OrderBy(r => r.Vendor?.Name ?? "zzz") : data.OrderByDescending(r => r.Vendor?.Name ?? ""),
+                "EndDate" => sortAscending ? data.OrderBy(r => r.EndDate ?? DateTime.MaxValue) : data.OrderByDescending(r => r.EndDate ?? DateTime.MinValue),
+                _ => data.OrderBy(r => r.Name)
+            };
+        }
+    }
+
+    private IEnumerable<Resource> PagedResources => SortedResources.Skip((currentPage - 1) * pageSize).Take(pageSize);
+    private int TotalCount => FilteredResources.Count();
+    private int TotalPages => (int)Math.Ceiling(TotalCount / (double)pageSize);
+
+    private void SetSort(string column)
+    {
+        if (sortColumn == column)
+            sortAscending = !sortAscending;
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+        currentPage = 1;
+    }
+
+    private string GetSortClass(string column) => sortColumn == column ? (sortAscending ? "asc" : "desc") : "";
+
+    private void GoToPage(int pg) => currentPage = Math.Max(1, Math.Min(pg, TotalPages));
+    private void ResetPage() => currentPage = 1;
+
+    private IEnumerable<int> GetPageNumbers()
+    {
+        var start = Math.Max(1, currentPage - 2);
+        var end = Math.Min(TotalPages, currentPage + 2);
+        if (end - start < 4) { if (start == 1) end = Math.Min(TotalPages, start + 4); else start = Math.Max(1, end - 4); }
+        return Enumerable.Range(start, end - start + 1);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        roles = await DbContext.Roles.OrderBy(r => r.Name).ToListAsync();
+        vendors = await DbContext.Vendors.OrderBy(v => v.Name).ToListAsync();
+        skills = await DbContext.Skills.OrderBy(s => s.Name).ToListAsync();
+        await LoadResources();
+    }
+
+    private async Task LoadResources()
+    {
+        resources = await DbContext.Resources
+            .Include(r => r.Role)
+            .Include(r => r.Vendor)
+            .Include(r => r.ResourceSkills).ThenInclude(rs => rs.Skill)
+            .ToListAsync();
+    }
+
+    private void OpenAddModal()
+    {
+        currentResource = new Resource();
+        selectedRoleId = 0;
+        selectedVendorId = 0;
+        selectedSkillIds = new HashSet<int>();
+        isEditing = false;
+        showModal = true;
+    }
+
+    private void OpenEditModal(Resource resource)
+    {
+        currentResource = new Resource { Id = resource.Id, Name = resource.Name, RoleId = resource.RoleId, VendorId = resource.VendorId, EndDate = resource.EndDate };
+        selectedRoleId = resource.RoleId;
+        selectedVendorId = resource.VendorId ?? 0;
+        selectedSkillIds = resource.ResourceSkills.Select(rs => rs.SkillId).ToHashSet();
+        isEditing = true;
+        showModal = true;
+    }
+
+    private void CloseModal() => showModal = false;
+
+    private void ToggleSkill(int skillId)
+    {
+        if (selectedSkillIds.Contains(skillId)) selectedSkillIds.Remove(skillId);
+        else selectedSkillIds.Add(skillId);
+    }
+
+    private async Task SaveResource()
+    {
+        if (string.IsNullOrWhiteSpace(currentResource.Name) || selectedRoleId == 0) return;
+
+        currentResource.RoleId = selectedRoleId;
+        currentResource.VendorId = selectedVendorId == 0 ? null : selectedVendorId;
+
+        if (isEditing)
+        {
+            var existing = await DbContext.Resources.Include(r => r.ResourceSkills).FirstOrDefaultAsync(r => r.Id == currentResource.Id);
+            if (existing != null)
+            {
+                existing.Name = currentResource.Name;
+                existing.RoleId = currentResource.RoleId;
+                existing.VendorId = currentResource.VendorId;
+                existing.EndDate = currentResource.EndDate;
+                DbContext.ResourceSkills.RemoveRange(existing.ResourceSkills);
+                foreach (var skillId in selectedSkillIds)
+                    DbContext.ResourceSkills.Add(new ResourceSkill { ResourceId = existing.Id, SkillId = skillId });
+                await DbContext.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            DbContext.Resources.Add(currentResource);
+            await DbContext.SaveChangesAsync();
+            foreach (var skillId in selectedSkillIds)
+                DbContext.ResourceSkills.Add(new ResourceSkill { ResourceId = currentResource.Id, SkillId = skillId });
+            await DbContext.SaveChangesAsync();
+        }
+
+        await LoadResources();
+        CloseModal();
+    }
+
+    private async Task DeleteResource(Resource resource)
+    {
+        DbContext.Resources.Remove(resource);
+        await DbContext.SaveChangesAsync();
+        await LoadResources();
+    }
+}

@@ -1,0 +1,769 @@
+@page "/projects"
+@using Microsoft.EntityFrameworkCore
+@using ProjectManagement.Infrastructure.Data
+@using ProjectManagement.Domain.Entities
+@using ProjectManagement.Domain.Enums
+@inject AppDbContext DbContext
+@rendermode InteractiveServer
+
+<PageTitle>Projects - Project Management</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Projects</h1>
+        <p class="page-subtitle">Manage your project portfolio</p>
+    </div>
+    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Project</button>
+</div>
+
+<div class="glass-card">
+    <div class="action-bar">
+        <div class="action-bar-left">
+            <div class="search-box">
+                <input type="text" class="form-control" placeholder="Search projects..." @bind="searchTerm" @bind:event="oninput" />
+            </div>
+            <div class="multi-select-dropdown">
+                <button type="button" class="form-control multi-select-btn" @onclick="ToggleStatusDropdown">
+                    @GetStatusFilterLabel()
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                @if (showStatusDropdown)
+                {
+                    <div class="multi-select-menu">
+                        <label class="multi-select-item">
+                            <input type="checkbox" checked="@(filterStatusIds.Count == 0)" @onclick="SelectAllStatuses" />
+                            <span>All Statuses</span>
+                        </label>
+                        @foreach (var status in statuses)
+                        {
+                            var statusId = status.Id;
+                            <label class="multi-select-item">
+                                <input type="checkbox" checked="@filterStatusIds.Contains(statusId)" @onclick="() => ToggleStatusFilter(statusId)" />
+                                <span class="status-badge" style="background-color: @status.Color; font-size: 0.7rem;">@status.Name</span>
+                            </label>
+                        }
+                        <div class="multi-select-actions">
+                            <button type="button" class="btn btn-sm btn-primary" @onclick="CloseStatusDropdown">Done</button>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="multi-select-dropdown">
+                <button type="button" class="form-control multi-select-btn" @onclick="ToggleLeadDropdown">
+                    @GetLeadFilterLabel()
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                @if (showLeadDropdown)
+                {
+                    <div class="multi-select-menu">
+                        <label class="multi-select-item">
+                            <input type="checkbox" checked="@(filterLeads.Count == 0)" @onclick="SelectAllLeads" />
+                            <span>All Leads</span>
+                        </label>
+                        @foreach (var lead in accountableLeads)
+                        {
+                            var leadName = lead;
+                            <label class="multi-select-item">
+                                <input type="checkbox" checked="@filterLeads.Contains(leadName)" @onclick="() => ToggleLeadFilter(leadName)" />
+                                <span>@lead</span>
+                            </label>
+                        }
+                        <div class="multi-select-actions">
+                            <button type="button" class="btn btn-sm btn-primary" @onclick="CloseLeadDropdown">Done</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+        <div class="action-bar-right">
+            @if (groupBy == "Project")
+            {
+                <button class="btn btn-secondary btn-sm" @onclick="ExpandAll">Expand All</button>
+                <button class="btn btn-secondary btn-sm" @onclick="CollapseAll">Collapse All</button>
+            }
+            <span class="group-label">View:</span>
+            <select class="form-control" style="width: auto;" @bind="groupBy">
+                <option value="Project">Projects with Resources</option>
+                <option value="None">Projects Only</option>
+                <option value="Lead">Group by Lead</option>
+                <option value="Status">Group by Status</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")'>Project Name</th>
+                    <th class="sortable @(GetSortClass("Status"))" @onclick='() => SetSort("Status")'>Status</th>
+                    <th class="sortable @(GetSortClass("Lead"))" @onclick='() => SetSort("Lead")'>Accountable Lead</th>
+                    <th class="sortable @(GetSortClass("Method"))" @onclick='() => SetSort("Method")'>Delivery Method</th>
+                    <th class="sortable @(GetSortClass("Priority"))" @onclick='() => SetSort("Priority")'>Priority</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (groupBy == "Project")
+                {
+                    @foreach (var project in SortedProjects)
+                    {
+                        var isExpanded = expandedProjects.Contains(project.Id);
+                        var hasAllocations = project.Allocations.Any();
+                        <tr class="@(hasAllocations ? "project-expandable" : "") @(dropTargetProjectId == project.Id ? "drop-target" : "")"
+                            ondragover="event.preventDefault();"
+                            @ondragenter="() => OnDragEnter(project.Id)"
+                            @ondragleave="OnDragLeave"
+                            @ondrop="() => OnDrop(project.Id)">
+                            <td>
+                                @if (hasAllocations)
+                                {
+                                    <button class="expand-btn" @onclick="() => ToggleProject(project.Id)">
+                                        @(isExpanded ? "▼" : "▶")
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="expand-placeholder"></span>
+                                }
+                                <strong>@project.Name</strong>
+                                @if (hasAllocations)
+                                {
+                                    <span class="allocation-count">(@project.Allocations.Count)</span>
+                                }
+                            </td>
+                            <td>
+                                @if (project.Status != null)
+                                {
+                                    <span class="status-badge" style="background-color: @project.Status.Color;">@project.Status.Name</span>
+                                }
+                                else
+                                {
+                                    <span class="badge badge-secondary">Not set</span>
+                                }
+                            </td>
+                            <td>@(project.AccountableLead ?? "-")</td>
+                            <td>
+                                @if (project.DeliveryMethod.HasValue)
+                                {
+                                    <span class="badge badge-primary">@project.DeliveryMethod</span>
+                                }
+                                else
+                                {
+                                    <span class="badge badge-secondary">Not set</span>
+                                }
+                            </td>
+                            <td>
+                                @if (project.Priority.HasValue)
+                                {
+                                    <span class="badge @GetPriorityClass(project.Priority.Value)">@project.Priority</span>
+                                }
+                                else
+                                {
+                                    <span class="badge badge-secondary">Not set</span>
+                                }
+                            </td>
+                            <td>
+                                <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(project)">Edit</button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteProject(project)">Delete</button>
+                            </td>
+                        </tr>
+                        @if (isExpanded && hasAllocations)
+                        {
+                            <tr class="allocation-panel-row">
+                                <td colspan="6">
+                                    <div class="allocation-panel">
+                                        <div class="allocation-grid">
+                                            @foreach (var allocation in project.Allocations.OrderBy(a => a.Resource.Name).ThenBy(a => a.Period.StartDate))
+                                            {
+                                                <div class="allocation-card @(draggedAllocation?.Id == allocation.Id ? "dragging" : "")"
+                                                     draggable="true"
+                                                     @ondragstart="() => OnDragStart(allocation)"
+                                                     @ondragend="OnDragEnd">
+                                                    <span class="drag-handle">⋮⋮</span>
+                                                    <span class="allocation-resource">@allocation.Resource.Name</span>
+                                                    <span class="badge badge-info">@allocation.Resource.Role.Name</span>
+                                                    <span class="allocation-period">@allocation.Period.Name</span>
+                                                    @if (allocation.Percentage.HasValue)
+                                                    {
+                                                        <span class="allocation-percentage">@allocation.Percentage%</span>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                }
+                else if (groupBy == "None")
+                {
+                    @foreach (var project in SortedProjects)
+                    {
+                        @RenderProjectRow(project)
+                    }
+                }
+                else
+                {
+                    @foreach (var group in GroupedProjects)
+                    {
+                        <tr class="group-header-row">
+                            <td colspan="6">
+                                <strong>@group.Key</strong>
+                                <span class="group-count">(@group.Count() projects)</span>
+                            </td>
+                        </tr>
+                        @foreach (var project in group)
+                        {
+                            @RenderProjectRow(project)
+                        }
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+@if (showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3 class="modal-title">@(isEditing ? "Edit Project" : "Add Project")</h3>
+                <button class="modal-close" @onclick="CloseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Project Name *</label>
+                    <input type="text" class="form-control" @bind="currentProject.Name" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Accountable Lead</label>
+                    <input type="text" class="form-control" @bind="currentProject.AccountableLead" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Delivery Method</label>
+                    <select class="form-control" @bind="selectedDeliveryMethod">
+                        <option value="">Select...</option>
+                        <option value="Kanban">Kanban</option>
+                        <option value="Scrum">Scrum</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select class="form-control" @bind="selectedStatusId">
+                        <option value="0">Select status...</option>
+                        @foreach (var status in statuses)
+                        {
+                            <option value="@status.Id">@status.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Priority</label>
+                    <select class="form-control" @bind="selectedPriority">
+                        <option value="">Select...</option>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveProject">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showMoveModal && allocationToMove != null)
+{
+    <div class="modal-backdrop" @onclick="CloseMoveModal">
+        <div class="modal" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3 class="modal-title">Move Allocation</h3>
+                <button class="modal-close" @onclick="CloseMoveModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="move-summary">
+                    <p>Moving <strong>@allocationToMove.Resource.Name</strong> (@allocationToMove.Resource.Role.Name)</p>
+                    <p class="move-direction">
+                        <span class="from-project">@allocationToMove.Project.Name</span>
+                        <span class="move-arrow">→</span>
+                        <span class="to-project">@targetProjectName</span>
+                    </p>
+                    <p class="period-info">Period: @allocationToMove.Period.Name</p>
+                </div>
+
+                @if (hasExistingRoleConflict)
+                {
+                    <div class="role-conflict-warning">
+                        <span class="warning-icon">⚠️</span>
+                        <div class="warning-content">
+                            <strong>@allocationToMove.Resource.Role.Name already exists</strong>
+                            <p><strong>@existingRoleHolder</strong> is already assigned as @allocationToMove.Resource.Role.Name for this project in @allocationToMove.Period.Name.</p>
+                            <p>Do you want to add another @allocationToMove.Resource.Role.Name to this project?</p>
+                        </div>
+                    </div>
+                }
+
+                <div class="form-group">
+                    <label class="form-label">Capacity</label>
+                    <div class="capacity-options">
+                        <label class="radio-option">
+                            <input type="radio" name="capacityOption" checked="@keepSameCapacity" @onchange="() => keepSameCapacity = true" />
+                            <span>Keep same capacity (@(allocationToMove.Percentage.HasValue ? $"{allocationToMove.Percentage}%" : "N/A"))</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="capacityOption" checked="@(!keepSameCapacity)" @onchange="() => keepSameCapacity = false" />
+                            <span>Change capacity</span>
+                        </label>
+                    </div>
+                </div>
+
+                @if (!keepSameCapacity)
+                {
+                    <div class="form-group">
+                        <label class="form-label">New Capacity (%)</label>
+                        <input type="number" class="form-control" min="0" max="100" @bind="newPercentage" placeholder="Enter percentage..." />
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseMoveModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="ConfirmMove">Move</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private RenderFragment RenderProjectRow(Project project) => __builder =>
+    {
+        <tr>
+            <td><strong>@project.Name</strong></td>
+            <td>
+                @if (project.Status != null)
+                {
+                    <span class="status-badge" style="background-color: @project.Status.Color;">@project.Status.Name</span>
+                }
+                else
+                {
+                    <span class="badge badge-secondary">Not set</span>
+                }
+            </td>
+            <td>@(project.AccountableLead ?? "-")</td>
+            <td>
+                @if (project.DeliveryMethod.HasValue)
+                {
+                    <span class="badge badge-primary">@project.DeliveryMethod</span>
+                }
+                else
+                {
+                    <span class="badge badge-secondary">Not set</span>
+                }
+            </td>
+            <td>
+                @if (project.Priority.HasValue)
+                {
+                    <span class="badge @GetPriorityClass(project.Priority.Value)">@project.Priority</span>
+                }
+                else
+                {
+                    <span class="badge badge-secondary">Not set</span>
+                }
+            </td>
+            <td>
+                <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(project)">Edit</button>
+                <button class="btn btn-danger btn-sm" @onclick="() => DeleteProject(project)">Delete</button>
+            </td>
+        </tr>
+    };
+
+    private List<Project> projects = new();
+    private List<ProjectStatus> statuses = new();
+    private string searchTerm = "";
+    private HashSet<int> filterStatusIds = new();
+    private HashSet<string> filterLeads = new();
+    private List<string> accountableLeads = new();
+    private bool showStatusDropdown = false;
+    private bool showLeadDropdown = false;
+    private bool showModal = false;
+    private string groupBy = "Project";
+    private HashSet<int> expandedProjects = new();
+    private Allocation? draggedAllocation = null;
+    private int? dropTargetProjectId = null;
+    private bool showMoveModal = false;
+    private Allocation? allocationToMove = null;
+    private int targetProjectIdForMove = 0;
+    private string targetProjectName = "";
+    private int? newPercentage = null;
+    private bool keepSameCapacity = true;
+    private bool hasExistingRoleConflict = false;
+    private string existingRoleHolder = "";
+    private bool isEditing = false;
+    private Project currentProject = new();
+    private string selectedDeliveryMethod = "";
+    private string selectedPriority = "";
+    private int selectedStatusId = 0;
+
+    // Sorting
+    private string sortColumn = "Name";
+    private bool sortAscending = true;
+
+    private IEnumerable<Project> FilteredProjects
+    {
+        get
+        {
+            var filtered = projects.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+                filtered = filtered.Where(p => p.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                                              (p.AccountableLead?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false));
+
+            if (filterStatusIds.Count > 0)
+                filtered = filtered.Where(p => p.StatusId.HasValue && filterStatusIds.Contains(p.StatusId.Value));
+
+            if (filterLeads.Count > 0)
+                filtered = filtered.Where(p => p.AccountableLead != null && filterLeads.Contains(p.AccountableLead));
+
+            return filtered;
+        }
+    }
+
+    private IEnumerable<Project> SortedProjects
+    {
+        get
+        {
+            var data = FilteredProjects;
+            return sortColumn switch
+            {
+                "Name" => sortAscending ? data.OrderBy(p => p.Name) : data.OrderByDescending(p => p.Name),
+                "Status" => sortAscending ? data.OrderBy(p => p.Status?.DisplayOrder ?? int.MaxValue) : data.OrderByDescending(p => p.Status?.DisplayOrder ?? 0),
+                "Lead" => sortAscending ? data.OrderBy(p => p.AccountableLead ?? "zzz") : data.OrderByDescending(p => p.AccountableLead ?? ""),
+                "Method" => sortAscending ? data.OrderBy(p => p.DeliveryMethod?.ToString() ?? "zzz") : data.OrderByDescending(p => p.DeliveryMethod?.ToString() ?? ""),
+                "Priority" => sortAscending ? data.OrderBy(p => (int?)p.Priority ?? int.MaxValue) : data.OrderByDescending(p => (int?)p.Priority ?? int.MinValue),
+                _ => data.OrderBy(p => p.Name)
+            };
+        }
+    }
+
+    private IEnumerable<IGrouping<string, Project>> GroupedProjects
+    {
+        get
+        {
+            var data = SortedProjects;
+            return groupBy switch
+            {
+                "Lead" => data.GroupBy(p => p.AccountableLead ?? "No Lead"),
+                "Status" => data.GroupBy(p => p.Status?.Name ?? "No Status"),
+                _ => data.GroupBy(p => "All")
+            };
+        }
+    }
+
+    private void SetSort(string column)
+    {
+        if (sortColumn == column)
+            sortAscending = !sortAscending;
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+    }
+
+    private string GetSortClass(string column) => sortColumn == column ? (sortAscending ? "asc" : "desc") : "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        statuses = await DbContext.ProjectStatuses.OrderBy(s => s.DisplayOrder).ToListAsync();
+        await LoadProjects();
+    }
+
+    private async Task LoadProjects()
+    {
+        projects = await DbContext.Projects
+            .Include(p => p.Status)
+            .Include(p => p.Allocations)
+                .ThenInclude(a => a.Resource)
+                    .ThenInclude(r => r.Role)
+            .Include(p => p.Allocations)
+                .ThenInclude(a => a.Period)
+            .OrderBy(p => p.Name)
+            .ToListAsync();
+        accountableLeads = projects
+            .Where(p => !string.IsNullOrWhiteSpace(p.AccountableLead))
+            .Select(p => p.AccountableLead!)
+            .Distinct()
+            .OrderBy(l => l)
+            .ToList();
+    }
+
+    private void OpenAddModal()
+    {
+        currentProject = new Project();
+        selectedDeliveryMethod = "";
+        selectedPriority = "";
+        selectedStatusId = 0;
+        isEditing = false;
+        showModal = true;
+    }
+
+    private void OpenEditModal(Project project)
+    {
+        currentProject = new Project
+        {
+            Id = project.Id,
+            Name = project.Name,
+            AccountableLead = project.AccountableLead,
+            DeliveryMethod = project.DeliveryMethod,
+            Priority = project.Priority,
+            StatusId = project.StatusId
+        };
+        selectedDeliveryMethod = project.DeliveryMethod?.ToString() ?? "";
+        selectedPriority = project.Priority?.ToString() ?? "";
+        selectedStatusId = project.StatusId ?? 0;
+        isEditing = true;
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+    }
+
+    private async Task SaveProject()
+    {
+        if (string.IsNullOrWhiteSpace(currentProject.Name))
+            return;
+
+        currentProject.DeliveryMethod = string.IsNullOrEmpty(selectedDeliveryMethod)
+            ? null
+            : Enum.Parse<DeliveryMethod>(selectedDeliveryMethod);
+        currentProject.Priority = string.IsNullOrEmpty(selectedPriority)
+            ? null
+            : Enum.Parse<Priority>(selectedPriority);
+        currentProject.StatusId = selectedStatusId == 0 ? null : selectedStatusId;
+
+        if (isEditing)
+        {
+            var existing = await DbContext.Projects.FindAsync(currentProject.Id);
+            if (existing != null)
+            {
+                existing.Name = currentProject.Name;
+                existing.AccountableLead = currentProject.AccountableLead;
+                existing.DeliveryMethod = currentProject.DeliveryMethod;
+                existing.Priority = currentProject.Priority;
+                existing.StatusId = currentProject.StatusId;
+                await DbContext.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            DbContext.Projects.Add(currentProject);
+            await DbContext.SaveChangesAsync();
+        }
+
+        await LoadProjects();
+        CloseModal();
+    }
+
+    private async Task DeleteProject(Project project)
+    {
+        DbContext.Projects.Remove(project);
+        await DbContext.SaveChangesAsync();
+        await LoadProjects();
+    }
+
+    private string GetPriorityClass(Priority priority) => priority switch
+    {
+        Priority.High => "badge-danger",
+        Priority.Medium => "badge-warning",
+        Priority.Low => "badge-success",
+        _ => "badge-secondary"
+    };
+
+    private void ToggleStatusDropdown() => showStatusDropdown = !showStatusDropdown;
+
+    private void CloseStatusDropdown() => showStatusDropdown = false;
+
+    private void ToggleStatusFilter(int statusId)
+    {
+        if (filterStatusIds.Contains(statusId))
+            filterStatusIds.Remove(statusId);
+        else
+            filterStatusIds.Add(statusId);
+    }
+
+    private void SelectAllStatuses()
+    {
+        filterStatusIds.Clear();
+    }
+
+    private string GetStatusFilterLabel()
+    {
+        if (filterStatusIds.Count == 0)
+            return "All Statuses";
+        if (filterStatusIds.Count == 1)
+            return statuses.FirstOrDefault(s => s.Id == filterStatusIds.First())?.Name ?? "1 selected";
+        return $"{filterStatusIds.Count} selected";
+    }
+
+    private void ToggleLeadDropdown() => showLeadDropdown = !showLeadDropdown;
+
+    private void CloseLeadDropdown() => showLeadDropdown = false;
+
+    private void ToggleLeadFilter(string lead)
+    {
+        if (filterLeads.Contains(lead))
+            filterLeads.Remove(lead);
+        else
+            filterLeads.Add(lead);
+    }
+
+    private void SelectAllLeads()
+    {
+        filterLeads.Clear();
+    }
+
+    private string GetLeadFilterLabel()
+    {
+        if (filterLeads.Count == 0)
+            return "All Leads";
+        if (filterLeads.Count == 1)
+            return filterLeads.First();
+        return $"{filterLeads.Count} selected";
+    }
+
+    private void ToggleProject(int projectId)
+    {
+        if (expandedProjects.Contains(projectId))
+            expandedProjects.Remove(projectId);
+        else
+            expandedProjects.Add(projectId);
+    }
+
+    private void ExpandAll()
+    {
+        foreach (var project in SortedProjects.Where(p => p.Allocations.Any()))
+        {
+            expandedProjects.Add(project.Id);
+        }
+    }
+
+    private void CollapseAll()
+    {
+        expandedProjects.Clear();
+    }
+
+    // Drag and Drop handlers
+    private void OnDragStart(Allocation allocation)
+    {
+        draggedAllocation = allocation;
+    }
+
+    private void OnDragEnd()
+    {
+        draggedAllocation = null;
+        dropTargetProjectId = null;
+    }
+
+    private void OnDragEnter(int projectId)
+    {
+        if (draggedAllocation != null && draggedAllocation.ProjectId != projectId)
+        {
+            dropTargetProjectId = projectId;
+        }
+    }
+
+    private void OnDragLeave()
+    {
+        dropTargetProjectId = null;
+    }
+
+    private void OnDrop(int targetProjectId)
+    {
+        if (draggedAllocation == null || draggedAllocation.ProjectId == targetProjectId)
+        {
+            dropTargetProjectId = null;
+            draggedAllocation = null;
+            return;
+        }
+
+        // Store info for the modal
+        allocationToMove = draggedAllocation;
+        targetProjectIdForMove = targetProjectId;
+        targetProjectName = projects.FirstOrDefault(p => p.Id == targetProjectId)?.Name ?? "Unknown";
+        newPercentage = draggedAllocation.Percentage;
+        keepSameCapacity = true;
+
+        // Check for existing SM or PO in target project for the same period
+        hasExistingRoleConflict = false;
+        existingRoleHolder = "";
+
+        var roleName = draggedAllocation.Resource.Role.Name;
+        if (roleName == "Scrum Master" || roleName == "Product Owner")
+        {
+            var targetProject = projects.FirstOrDefault(p => p.Id == targetProjectId);
+            if (targetProject != null)
+            {
+                var existingAllocation = targetProject.Allocations
+                    .FirstOrDefault(a => a.Resource.Role.Name == roleName && a.PeriodId == draggedAllocation.PeriodId);
+
+                if (existingAllocation != null)
+                {
+                    hasExistingRoleConflict = true;
+                    existingRoleHolder = existingAllocation.Resource.Name;
+                }
+            }
+        }
+
+        showMoveModal = true;
+        dropTargetProjectId = null;
+        draggedAllocation = null;
+    }
+
+    private void CloseMoveModal()
+    {
+        showMoveModal = false;
+        allocationToMove = null;
+        targetProjectIdForMove = 0;
+        targetProjectName = "";
+        newPercentage = null;
+        keepSameCapacity = true;
+        hasExistingRoleConflict = false;
+        existingRoleHolder = "";
+    }
+
+    private async Task ConfirmMove()
+    {
+        if (allocationToMove == null)
+        {
+            CloseMoveModal();
+            return;
+        }
+
+        var allocation = await DbContext.Allocations.FindAsync(allocationToMove.Id);
+        if (allocation != null)
+        {
+            allocation.ProjectId = targetProjectIdForMove;
+
+            if (!keepSameCapacity)
+            {
+                allocation.Percentage = newPercentage;
+            }
+
+            await DbContext.SaveChangesAsync();
+            await LoadProjects();
+
+            // Keep target project expanded to show the moved allocation
+            expandedProjects.Add(targetProjectIdForMove);
+        }
+
+        CloseMoveModal();
+    }
+}
