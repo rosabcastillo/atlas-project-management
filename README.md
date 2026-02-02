@@ -42,11 +42,6 @@ dotnet run
 
 The application will be available at `https://localhost:5001` or `http://localhost:5000`.
 
-### Default Admin Credentials
-
-- **Username:** admin
-- **Password:** admin123
-
 ## Database
 
 The application uses SQLite with automatic database creation and seeding. The database file (`projectmanagement.db`) is created in the Web project directory on first run.
