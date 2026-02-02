@@ -16,4 +16,5 @@ public class Resource
 
     public ICollection<ResourceSkill> ResourceSkills { get; set; } = new List<ResourceSkill>();
     public ICollection<Allocation> Allocations { get; set; } = new List<Allocation>();
+    public ICollection<ResourceUnavailability> Unavailabilities { get; set; } = new List<ResourceUnavailability>();
 }

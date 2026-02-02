@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectStatus> ProjectStatuses => Set<ProjectStatus>();
     public DbSet<Allocation> Allocations => Set<Allocation>();
+    public DbSet<ResourceUnavailability> ResourceUnavailabilities => Set<ResourceUnavailability>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -63,6 +64,17 @@ public class AppDbContext : DbContext
         // Index for faster queries on allocation date ranges
         modelBuilder.Entity<Allocation>()
             .HasIndex(a => new { a.ResourceId, a.StartDate, a.EndDate });
+
+        // ResourceUnavailability relationships
+        modelBuilder.Entity<ResourceUnavailability>()
+            .HasOne(u => u.Resource)
+            .WithMany(r => r.Unavailabilities)
+            .HasForeignKey(u => u.ResourceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Index for faster queries on unavailability date ranges
+        modelBuilder.Entity<ResourceUnavailability>()
+            .HasIndex(u => new { u.ResourceId, u.StartDate, u.EndDate });
 
         // Project - Status relationship
         modelBuilder.Entity<Project>()

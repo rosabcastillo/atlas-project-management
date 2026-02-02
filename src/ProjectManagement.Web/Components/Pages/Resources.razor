@@ -2,6 +2,7 @@
 @using Microsoft.EntityFrameworkCore
 @using ProjectManagement.Infrastructure.Data
 @using ProjectManagement.Domain.Entities
+@using ProjectManagement.Domain.Enums
 @inject AppDbContext DbContext
 @rendermode InteractiveServer
 
@@ -93,6 +94,7 @@
                         </td>
                         <td>
                             <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(resource)">Edit</button>
+                            <button class="btn btn-secondary btn-sm" @onclick="() => OpenUnavailabilityModal(resource)">Unavailability</button>
                             <button class="btn btn-danger btn-sm" @onclick="() => DeleteResource(resource)">Delete</button>
                         </td>
                     </tr>
@@ -175,6 +177,110 @@
     </div>
 }
 
+@if (showUnavailabilityModal && unavailabilityResource != null)
+{
+    <div class="modal-backdrop" @onclick="CloseUnavailabilityModal">
+        <div class="modal modal-lg" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3 class="modal-title">Manage Unavailability - @unavailabilityResource.Name</h3>
+                <button class="modal-close" @onclick="CloseUnavailabilityModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="unavailability-form">
+                    <h4>@(isEditingUnavailability ? "Edit Unavailability" : "Add Unavailability")</h4>
+                    @if (!string.IsNullOrEmpty(unavailabilityError))
+                    {
+                        <div class="alert alert-error">@unavailabilityError</div>
+                    }
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">From Date *</label>
+                            <input type="date" class="form-control" @bind="currentUnavailability.StartDate" />
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">To Date *</label>
+                            <input type="date" class="form-control" @bind="currentUnavailability.EndDate" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">Hours per day</label>
+                            <select class="form-control" @bind="currentUnavailability.Hours">
+                                <option value="8">8 (Full day)</option>
+                                <option value="7">7</option>
+                                <option value="6">6</option>
+                                <option value="5">5</option>
+                                <option value="4">4 (Half day)</option>
+                                <option value="3">3</option>
+                                <option value="2">2</option>
+                                <option value="1">1</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">Reason</label>
+                            <select class="form-control" @bind="currentUnavailability.Reason">
+                                <option value="@UnavailabilityReason.PTO">PTO</option>
+                                <option value="@UnavailabilityReason.Holiday">Holiday</option>
+                                <option value="@UnavailabilityReason.SickLeave">Sick Leave</option>
+                                <option value="@UnavailabilityReason.Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Notes</label>
+                        <input type="text" class="form-control" @bind="currentUnavailability.Notes" placeholder="Optional notes..." />
+                    </div>
+                    <div class="form-actions">
+                        @if (isEditingUnavailability)
+                        {
+                            <button class="btn btn-secondary btn-sm" @onclick="CancelEditUnavailability">Cancel</button>
+                        }
+                        <button class="btn btn-primary btn-sm" @onclick="SaveUnavailability">
+                            @(isEditingUnavailability ? "Update" : "Add")
+                        </button>
+                    </div>
+                </div>
+
+                @if (resourceUnavailabilities.Any())
+                {
+                    <div class="unavailability-list">
+                        <h4>Existing Unavailabilities</h4>
+                        <div class="unavailability-items">
+                            @foreach (var u in resourceUnavailabilities.OrderByDescending(x => x.StartDate))
+                            {
+                                <div class="unavailability-item">
+                                    <div class="unavailability-info">
+                                        <span class="unavailability-dates">
+                                            @u.StartDate.ToString("MMM dd, yyyy")
+                                            @if (u.StartDate != u.EndDate)
+                                            {
+                                                <span> - @u.EndDate.ToString("MMM dd, yyyy")</span>
+                                            }
+                                        </span>
+                                        <span class="badge @GetReasonBadgeClass(u.Reason)">@GetReasonDisplayName(u.Reason)</span>
+                                        <span class="unavailability-hours">@u.Hours h/day</span>
+                                        @if (!string.IsNullOrWhiteSpace(u.Notes))
+                                        {
+                                            <span class="unavailability-notes">@u.Notes</span>
+                                        }
+                                    </div>
+                                    <div class="unavailability-actions">
+                                        <button class="btn btn-secondary btn-sm" @onclick="() => EditUnavailability(u)">Edit</button>
+                                        <button class="btn btn-danger btn-sm" @onclick="() => DeleteUnavailability(u)">Delete</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseUnavailabilityModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<Resource> resources = new();
     private List<Role> roles = new();
@@ -189,6 +295,14 @@
     private int selectedRoleId = 0;
     private int selectedVendorId = 0;
     private HashSet<int> selectedSkillIds = new();
+
+    // Unavailability management
+    private bool showUnavailabilityModal = false;
+    private Resource? unavailabilityResource = null;
+    private List<ResourceUnavailability> resourceUnavailabilities = new();
+    private ResourceUnavailability currentUnavailability = new();
+    private bool isEditingUnavailability = false;
+    private string? unavailabilityError = null;
 
     // Pagination & Sorting
     private int currentPage = 1;
@@ -348,4 +462,154 @@
         await DbContext.SaveChangesAsync();
         await LoadResources();
     }
+
+    // Unavailability management methods
+    private async Task OpenUnavailabilityModal(Resource resource)
+    {
+        unavailabilityResource = resource;
+        await LoadResourceUnavailabilities();
+        ResetUnavailabilityForm();
+        showUnavailabilityModal = true;
+    }
+
+    private void CloseUnavailabilityModal()
+    {
+        showUnavailabilityModal = false;
+        unavailabilityResource = null;
+        resourceUnavailabilities.Clear();
+    }
+
+    private async Task LoadResourceUnavailabilities()
+    {
+        if (unavailabilityResource == null) return;
+        resourceUnavailabilities = await DbContext.ResourceUnavailabilities
+            .Where(u => u.ResourceId == unavailabilityResource.Id)
+            .ToListAsync();
+    }
+
+    private void ResetUnavailabilityForm()
+    {
+        currentUnavailability = new ResourceUnavailability
+        {
+            StartDate = DateTime.Today,
+            EndDate = DateTime.Today,
+            Hours = 8,
+            Reason = UnavailabilityReason.PTO
+        };
+        isEditingUnavailability = false;
+        unavailabilityError = null;
+    }
+
+    private void EditUnavailability(ResourceUnavailability u)
+    {
+        currentUnavailability = new ResourceUnavailability
+        {
+            Id = u.Id,
+            ResourceId = u.ResourceId,
+            StartDate = u.StartDate,
+            EndDate = u.EndDate,
+            Hours = u.Hours,
+            Reason = u.Reason,
+            Notes = u.Notes
+        };
+        isEditingUnavailability = true;
+    }
+
+    private void CancelEditUnavailability()
+    {
+        ResetUnavailabilityForm();
+    }
+
+    private async Task SaveUnavailability()
+    {
+        unavailabilityError = null;
+
+        if (unavailabilityResource == null) return;
+
+        // Validate dates
+        if (currentUnavailability.StartDate > currentUnavailability.EndDate)
+        {
+            unavailabilityError = "End date must be on or after the start date.";
+            return;
+        }
+
+        // Validate hours
+        if (currentUnavailability.Hours < 1 || currentUnavailability.Hours > 8)
+        {
+            unavailabilityError = "Hours must be between 1 and 8.";
+            return;
+        }
+
+        // Check for overlapping periods
+        var overlapping = resourceUnavailabilities
+            .Where(u => isEditingUnavailability ? u.Id != currentUnavailability.Id : true)
+            .Where(u => currentUnavailability.StartDate <= u.EndDate && currentUnavailability.EndDate >= u.StartDate)
+            .FirstOrDefault();
+
+        if (overlapping != null)
+        {
+            unavailabilityError = $"This period overlaps with existing unavailability ({overlapping.StartDate:MMM dd} - {overlapping.EndDate:MMM dd, yyyy}).";
+            return;
+        }
+
+        if (isEditingUnavailability)
+        {
+            var existing = await DbContext.ResourceUnavailabilities.FindAsync(currentUnavailability.Id);
+            if (existing != null)
+            {
+                existing.StartDate = currentUnavailability.StartDate;
+                existing.EndDate = currentUnavailability.EndDate;
+                existing.Hours = currentUnavailability.Hours;
+                existing.Reason = currentUnavailability.Reason;
+                existing.Notes = currentUnavailability.Notes;
+                await DbContext.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            var newUnavailability = new ResourceUnavailability
+            {
+                ResourceId = unavailabilityResource.Id,
+                StartDate = currentUnavailability.StartDate,
+                EndDate = currentUnavailability.EndDate,
+                Hours = currentUnavailability.Hours,
+                Reason = currentUnavailability.Reason,
+                Notes = currentUnavailability.Notes
+            };
+            DbContext.ResourceUnavailabilities.Add(newUnavailability);
+            await DbContext.SaveChangesAsync();
+        }
+
+        await LoadResourceUnavailabilities();
+        ResetUnavailabilityForm();
+    }
+
+    private async Task DeleteUnavailability(ResourceUnavailability u)
+    {
+        var existing = await DbContext.ResourceUnavailabilities.FindAsync(u.Id);
+        if (existing != null)
+        {
+            DbContext.ResourceUnavailabilities.Remove(existing);
+            await DbContext.SaveChangesAsync();
+            await LoadResourceUnavailabilities();
+        }
+    }
+
+    private string GetReasonBadgeClass(UnavailabilityReason reason) => reason switch
+    {
+        UnavailabilityReason.PTO => "badge-pto",
+        UnavailabilityReason.Holiday => "badge-holiday",
+        UnavailabilityReason.SickLeave => "badge-sick",
+        UnavailabilityReason.Other => "badge-other",
+        _ => "badge-secondary"
+    };
+
+    private string GetReasonDisplayName(UnavailabilityReason reason) => reason switch
+    {
+        UnavailabilityReason.PTO => "PTO",
+        UnavailabilityReason.Holiday => "Holiday",
+        UnavailabilityReason.SickLeave => "Sick Leave",
+        UnavailabilityReason.Other => "Other",
+        _ => reason.ToString()
+    };
 }

@@ -2,6 +2,7 @@
 @using Microsoft.EntityFrameworkCore
 @using ProjectManagement.Infrastructure.Data
 @using ProjectManagement.Domain.Entities
+@using ProjectManagement.Domain.Enums
 @inject AppDbContext DbContext
 @rendermode InteractiveServer
 
@@ -71,13 +72,31 @@
                 <div class="calendar-week">
                     @foreach (var day in week)
                     {
-                        var dayAllocations = GetAllocationsForDay(day);
+                        var dayUnavailabilities = GetUnavailabilitiesForDay(day);
+                        var hasFullDayUnavailability = dayUnavailabilities.Any(u => u.Hours >= 8);
+                        var dayAllocations = hasFullDayUnavailability ? new List<AllocationDisplay>() : GetAllocationsForDay(day);
                         var isToday = day.Date == DateTime.Today;
                         var isCurrentMonth = day.Month == currentMonth.Month;
 
                         <div class="calendar-day @(!isCurrentMonth ? "other-month" : "") @(isToday ? "today" : "")">
                             <div class="calendar-day-number">@day.Day</div>
                             <div class="calendar-day-content">
+                                @foreach (var unav in dayUnavailabilities)
+                                {
+                                    var startsToday = unav.StartDate.Date == day.Date;
+                                    var endsToday = unav.EndDate.Date == day.Date;
+                                    var isPartialDay = unav.Hours < 8;
+
+                                    <div class="calendar-unavailability unavailability-@unav.Reason.ToString().ToLower() @(startsToday ? "starts-here" : "") @(endsToday ? "ends-here" : "") @(isPartialDay ? "partial-day" : "")"
+                                         title="@unav.TooltipText">
+                                        <span class="unavailability-icon">✕</span>
+                                        <span class="unavailability-label">@unav.Label</span>
+                                        @if (isPartialDay)
+                                        {
+                                            <span class="unavailability-hours-badge">@unav.Hours h</span>
+                                        }
+                                    </div>
+                                }
                                 @foreach (var alloc in dayAllocations)
                                 {
                                     var startsToday = alloc.StartDate.Date == day.Date;
@@ -86,13 +105,10 @@
                                     <div class="calendar-allocation @(startsToday ? "starts-here" : "") @(endsToday ? "ends-here" : "")"
                                          style="background-color: @alloc.Color;"
                                          title="@alloc.TooltipText">
-                                        @if (startsToday || day.DayOfWeek == DayOfWeek.Sunday)
+                                        <span class="allocation-label">@alloc.Label</span>
+                                        @if (alloc.Percentage.HasValue)
                                         {
-                                            <span class="allocation-label">@alloc.Label</span>
-                                            @if (alloc.Percentage.HasValue)
-                                            {
-                                                <span class="allocation-pct">@alloc.Percentage%</span>
-                                            }
+                                            <span class="allocation-pct">@alloc.Percentage%</span>
                                         }
                                     </div>
                                 }
@@ -122,7 +138,7 @@
 
 @if (viewMode == "Project" && selectedProjectId > 0 && filteredAllocations.Any())
 {
-    <div class="glass-card">
+    <div class="glass-card calendar-legend-card">
         <div class="glass-card-header">
             <h3 class="glass-card-title">Legend - Resources</h3>
         </div>
@@ -139,21 +155,53 @@
     </div>
 }
 
-@if (viewMode == "Resource" && selectedResourceId > 0 && filteredAllocations.Any())
+@if (viewMode == "Resource" && selectedResourceId > 0 && (filteredAllocations.Any() || filteredUnavailabilities.Any()))
 {
-    <div class="glass-card">
+    <div class="glass-card calendar-legend-card">
         <div class="glass-card-header">
-            <h3 class="glass-card-title">Legend - Projects</h3>
+            <h3 class="glass-card-title">Legend</h3>
         </div>
         <div class="calendar-legend">
-            @foreach (var alloc in filteredAllocations.DistinctBy(a => a.ProjectId))
+            @if (filteredUnavailabilities.Any())
             {
-                <div class="legend-item">
-                    <span class="legend-color" style="background-color: @GetProjectColor(alloc.ProjectId);"></span>
-                    <span class="legend-label">@alloc.Project.Name</span>
-                    @if (alloc.Percentage.HasValue)
+                <div class="legend-section">
+                    <span class="legend-section-title">Unavailability</span>
+                    <div class="legend-item">
+                        <span class="legend-color unavailability-pto"></span>
+                        <span class="legend-label">PTO</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color unavailability-holiday"></span>
+                        <span class="legend-label">Holiday</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color unavailability-sick"></span>
+                        <span class="legend-label">Sick Leave</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color unavailability-other"></span>
+                        <span class="legend-label">Other</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color partial-day-indicator"></span>
+                        <span class="legend-label">Partial Day (striped)</span>
+                    </div>
+                </div>
+            }
+            @if (filteredAllocations.Any())
+            {
+                <div class="legend-section legend-section-projects">
+                    <span class="legend-section-title">Projects</span>
+                    @foreach (var alloc in filteredAllocations.DistinctBy(a => a.ProjectId))
                     {
-                        <span class="legend-pct">@alloc.Percentage%</span>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background-color: @GetProjectColor(alloc.ProjectId);"></span>
+                            <span class="legend-label">@alloc.Project.Name</span>
+                            @if (alloc.Percentage.HasValue)
+                            {
+                                <span class="legend-pct">@alloc.Percentage%</span>
+                            }
+                        </div>
                     }
                 </div>
             }
@@ -166,6 +214,8 @@
     private List<Project> projects = new();
     private List<Allocation> allocations = new();
     private List<Allocation> filteredAllocations = new();
+    private List<ResourceUnavailability> unavailabilities = new();
+    private List<ResourceUnavailability> filteredUnavailabilities = new();
 
     private string viewMode = "Resource";
     private int selectedResourceId = 0;
@@ -198,8 +248,13 @@
             .Include(a => a.Project)
             .ToListAsync();
 
+        unavailabilities = await DbContext.ResourceUnavailabilities
+            .Include(u => u.Resource)
+            .ToListAsync();
+
         BuildCalendarGrid();
         FilterAllocations();
+        FilterUnavailabilities();
     }
 
     private void BuildCalendarGrid()
@@ -258,6 +313,43 @@
         }
     }
 
+    private void FilterUnavailabilities()
+    {
+        // Only show unavailabilities in Resource view mode
+        if (viewMode != "Resource" || selectedResourceId <= 0)
+        {
+            filteredUnavailabilities = new List<ResourceUnavailability>();
+            return;
+        }
+
+        var firstDay = calendarWeeks.FirstOrDefault()?.FirstOrDefault() ?? currentMonth;
+        var lastDay = calendarWeeks.LastOrDefault()?.LastOrDefault() ?? currentMonth.AddMonths(1);
+
+        filteredUnavailabilities = unavailabilities
+            .Where(u => u.ResourceId == selectedResourceId &&
+                       u.StartDate <= lastDay &&
+                       u.EndDate >= firstDay)
+            .OrderBy(u => u.StartDate)
+            .ToList();
+    }
+
+    private List<UnavailabilityDisplay> GetUnavailabilitiesForDay(DateTime day)
+    {
+        return filteredUnavailabilities
+            .Where(u => u.StartDate <= day && u.EndDate >= day)
+            .Select(u => new UnavailabilityDisplay
+            {
+                UnavailabilityId = u.Id,
+                Label = GetReasonDisplayName(u.Reason),
+                Reason = u.Reason,
+                Hours = u.Hours,
+                StartDate = u.StartDate,
+                EndDate = u.EndDate,
+                TooltipText = BuildUnavailabilityTooltip(u)
+            })
+            .ToList();
+    }
+
     private List<AllocationDisplay> GetAllocationsForDay(DateTime day)
     {
         return filteredAllocations
@@ -289,6 +381,59 @@
         return text;
     }
 
+    private string BuildUnavailabilityTooltip(ResourceUnavailability u)
+    {
+        var text = GetReasonDisplayName(u.Reason);
+        if (u.Hours < 8)
+            text += $" ({u.Hours}h/day)";
+        else
+            text += " (Full day)";
+
+        text += $"\n{u.StartDate:MMM dd} - {u.EndDate:MMM dd, yyyy}";
+
+        if (!string.IsNullOrWhiteSpace(u.Notes))
+            text += $"\n{u.Notes}";
+
+        return text;
+    }
+
+    private string GetReasonDisplayName(UnavailabilityReason reason) => reason switch
+    {
+        UnavailabilityReason.PTO => "PTO",
+        UnavailabilityReason.Holiday => "Holiday",
+        UnavailabilityReason.SickLeave => "Sick Leave",
+        UnavailabilityReason.Other => "Other",
+        _ => reason.ToString()
+    };
+
+    private string GetUnavailabilityStyle(UnavailabilityReason reason, bool isPartialDay)
+    {
+        var baseColor = reason switch
+        {
+            UnavailabilityReason.PTO => "#fecaca",
+            UnavailabilityReason.Holiday => "#d9f99d",
+            UnavailabilityReason.SickLeave => "#fed7aa",
+            UnavailabilityReason.Other => "#e5e7eb",
+            _ => "#e5e7eb"
+        };
+
+        var borderColor = reason switch
+        {
+            UnavailabilityReason.PTO => "#f87171",
+            UnavailabilityReason.Holiday => "#a3e635",
+            UnavailabilityReason.SickLeave => "#fb923c",
+            UnavailabilityReason.Other => "#9ca3af",
+            _ => "#9ca3af"
+        };
+
+        if (isPartialDay)
+        {
+            return $"background: repeating-linear-gradient(45deg, {baseColor}, {baseColor} 4px, white 4px, white 8px); border-color: {borderColor};";
+        }
+
+        return $"background-color: {baseColor}; border-color: {borderColor};";
+    }
+
     private string GetProjectColor(int projectId) => ColorPalette[projectId % ColorPalette.Length];
     private string GetResourceColor(int resourceId) => ColorPalette[resourceId % ColorPalette.Length];
 
@@ -296,11 +441,13 @@
     {
         viewMode = mode;
         FilterAllocations();
+        FilterUnavailabilities();
     }
 
     private void OnSelectionChanged()
     {
         FilterAllocations();
+        FilterUnavailabilities();
     }
 
     private void PreviousMonth()
@@ -308,6 +455,7 @@
         currentMonth = currentMonth.AddMonths(-1);
         BuildCalendarGrid();
         FilterAllocations();
+        FilterUnavailabilities();
     }
 
     private void NextMonth()
@@ -315,6 +463,7 @@
         currentMonth = currentMonth.AddMonths(1);
         BuildCalendarGrid();
         FilterAllocations();
+        FilterUnavailabilities();
     }
 
     private void GoToToday()
@@ -322,6 +471,7 @@
         currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         BuildCalendarGrid();
         FilterAllocations();
+        FilterUnavailabilities();
     }
 
     private class AllocationDisplay
@@ -330,6 +480,17 @@
         public string Label { get; set; } = "";
         public int? Percentage { get; set; }
         public string Color { get; set; } = "";
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        public string TooltipText { get; set; } = "";
+    }
+
+    private class UnavailabilityDisplay
+    {
+        public int UnavailabilityId { get; set; }
+        public string Label { get; set; } = "";
+        public UnavailabilityReason Reason { get; set; }
+        public int Hours { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
         public string TooltipText { get; set; } = "";
