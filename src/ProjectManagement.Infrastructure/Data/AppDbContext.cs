@@ -9,6 +9,7 @@ public class AppDbContext : DbContext
     {
     }
 
+    public DbSet<Admin> Admins => Set<Admin>();
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Vendor> Vendors => Set<Vendor>();
@@ -71,6 +72,7 @@ public class AppDbContext : DbContext
             .IsRequired(false);
 
         // Indexes
+        modelBuilder.Entity<Admin>().HasIndex(a => a.Username).IsUnique();
         modelBuilder.Entity<Skill>().HasIndex(s => s.Name).IsUnique();
         modelBuilder.Entity<Role>().HasIndex(r => r.Name).IsUnique();
         modelBuilder.Entity<Vendor>().HasIndex(v => v.Name).IsUnique();
