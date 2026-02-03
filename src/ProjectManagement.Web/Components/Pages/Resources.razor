@@ -13,7 +13,10 @@
         <h1 class="page-title">Resources</h1>
         <p class="page-subtitle">Manage your team members and their skills</p>
     </div>
-    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Resource</button>
+    <div class="page-header-actions">
+        <button class="btn btn-secondary" @onclick="OpenImportModal">Import Leaves</button>
+        <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Resource</button>
+    </div>
 </div>
 
 <div class="glass-card">
@@ -281,6 +284,110 @@
     </div>
 }
 
+@if (showImportModal)
+{
+    <div class="modal-backdrop" @onclick="CloseImportModal">
+        <div class="modal modal-lg" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3 class="modal-title">Import Leaves from CSV</h3>
+                <button class="modal-close" @onclick="CloseImportModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                @if (string.IsNullOrEmpty(importError) == false)
+                {
+                    <div class="alert alert-error">@importError</div>
+                }
+
+                @if (importPreviewData.Count == 0)
+                {
+                    <div class="import-instructions">
+                        <p><strong>CSV Format:</strong></p>
+                        <code>ResourceName,StartDate,EndDate,Hours,Reason,Notes</code>
+                        <p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">
+                            <strong>Reason values:</strong> PTO, Holiday, SickLeave, Other<br/>
+                            <strong>Hours:</strong> 1-8 (8 = full day)<br/>
+                            <strong>Date format:</strong> YYYY-MM-DD
+                        </p>
+                        <div class="form-group" style="margin-top: 1rem;">
+                            <label class="form-label">Select CSV File</label>
+                            <InputFile OnChange="HandleFileSelected" accept=".csv" class="form-control" />
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="import-preview">
+                        <p><strong>Preview:</strong> @importPreviewData.Count row(s) found, @importPreviewData.Count(r => r.IsValid) valid</p>
+                        <div class="import-preview-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Resource</th>
+                                        <th>Start Date</th>
+                                        <th>End Date</th>
+                                        <th>Hours</th>
+                                        <th>Reason</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var row in importPreviewData)
+                                    {
+                                        <tr class="@(row.IsValid ? "" : "row-error")">
+                                            <td>
+                                                @if (row.IsValid)
+                                                {
+                                                    <span class="badge badge-success">Valid</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge badge-danger" title="@row.ErrorMessage">Error</span>
+                                                }
+                                            </td>
+                                            <td>@row.ResourceName</td>
+                                            <td>@row.StartDate?.ToString("MMM dd, yyyy")</td>
+                                            <td>@row.EndDate?.ToString("MMM dd, yyyy")</td>
+                                            <td>@row.Hours</td>
+                                            <td>@row.Reason</td>
+                                            <td>@row.Notes</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        @if (importPreviewData.Any(r => !r.IsValid))
+                        {
+                            <div class="import-errors">
+                                <p><strong>Errors:</strong></p>
+                                <ul>
+                                    @foreach (var row in importPreviewData.Where(r => !r.IsValid))
+                                    {
+                                        <li>Row @(importPreviewData.IndexOf(row) + 1): @row.ErrorMessage</li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                @if (importPreviewData.Count > 0)
+                {
+                    <button class="btn btn-secondary" @onclick="ResetImport">Back</button>
+                    <button class="btn btn-primary" @onclick="ConfirmImport" disabled="@(!importPreviewData.Any(r => r.IsValid))">
+                        Import @importPreviewData.Count(r => r.IsValid) Valid Row(s)
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-secondary" @onclick="CloseImportModal">Cancel</button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private List<Resource> resources = new();
     private List<Role> roles = new();
@@ -300,6 +407,11 @@
     private bool showUnavailabilityModal = false;
     private Resource? unavailabilityResource = null;
     private List<ResourceUnavailability> resourceUnavailabilities = new();
+
+    // Import functionality
+    private bool showImportModal = false;
+    private string? importError = null;
+    private List<ImportRowData> importPreviewData = new();
     private ResourceUnavailability currentUnavailability = new();
     private bool isEditingUnavailability = false;
     private string? unavailabilityError = null;
@@ -612,4 +724,237 @@
         UnavailabilityReason.Other => "Other",
         _ => reason.ToString()
     };
+
+    // Import methods
+    private void OpenImportModal()
+    {
+        importError = null;
+        importPreviewData.Clear();
+        showImportModal = true;
+    }
+
+    private void CloseImportModal()
+    {
+        showImportModal = false;
+        importError = null;
+        importPreviewData.Clear();
+    }
+
+    private void ResetImport()
+    {
+        importError = null;
+        importPreviewData.Clear();
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        importError = null;
+        importPreviewData.Clear();
+
+        try
+        {
+            var file = e.File;
+            if (file == null)
+            {
+                importError = "No file selected.";
+                return;
+            }
+
+            if (!file.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+            {
+                importError = "Please select a CSV file.";
+                return;
+            }
+
+            using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024); // 1MB max
+            using var reader = new System.IO.StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length < 2)
+            {
+                importError = "CSV file must have a header row and at least one data row.";
+                return;
+            }
+
+            // Skip header row
+            for (int i = 1; i < lines.Length; i++)
+            {
+                var line = lines[i].Trim();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                var row = ParseCsvRow(line, i);
+                importPreviewData.Add(row);
+            }
+
+            if (importPreviewData.Count == 0)
+            {
+                importError = "No valid data rows found in the CSV file.";
+            }
+        }
+        catch (Exception ex)
+        {
+            importError = $"Error reading file: {ex.Message}";
+        }
+    }
+
+    private ImportRowData ParseCsvRow(string line, int rowNumber)
+    {
+        var row = new ImportRowData();
+        var parts = SplitCsvLine(line);
+
+        if (parts.Length < 4)
+        {
+            row.ErrorMessage = "Not enough columns. Expected: ResourceName,StartDate,EndDate,Hours,Reason,Notes";
+            return row;
+        }
+
+        row.ResourceName = parts[0].Trim();
+
+        // Find resource
+        var resource = resources.FirstOrDefault(r =>
+            r.Name.Equals(row.ResourceName, StringComparison.OrdinalIgnoreCase));
+
+        if (resource == null)
+        {
+            row.ErrorMessage = $"Resource '{row.ResourceName}' not found.";
+            return row;
+        }
+        row.ResourceId = resource.Id;
+
+        // Parse start date
+        if (!DateTime.TryParse(parts[1].Trim(), out var startDate))
+        {
+            row.ErrorMessage = $"Invalid start date: {parts[1]}";
+            return row;
+        }
+        row.StartDate = startDate;
+
+        // Parse end date
+        if (!DateTime.TryParse(parts[2].Trim(), out var endDate))
+        {
+            row.ErrorMessage = $"Invalid end date: {parts[2]}";
+            return row;
+        }
+        row.EndDate = endDate;
+
+        if (row.StartDate > row.EndDate)
+        {
+            row.ErrorMessage = "Start date must be before or equal to end date.";
+            return row;
+        }
+
+        // Parse hours
+        if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]))
+        {
+            if (int.TryParse(parts[3].Trim(), out var hours) && hours >= 1 && hours <= 8)
+            {
+                row.Hours = hours;
+            }
+            else
+            {
+                row.ErrorMessage = $"Invalid hours: {parts[3]}. Must be 1-8.";
+                return row;
+            }
+        }
+
+        // Parse reason
+        if (parts.Length > 4 && !string.IsNullOrWhiteSpace(parts[4]))
+        {
+            var reasonStr = parts[4].Trim();
+            if (Enum.TryParse<UnavailabilityReason>(reasonStr, true, out var reason))
+            {
+                row.Reason = reason;
+            }
+            else
+            {
+                row.ErrorMessage = $"Invalid reason: {reasonStr}. Use: PTO, Holiday, SickLeave, or Other.";
+                return row;
+            }
+        }
+
+        // Parse notes
+        if (parts.Length > 5)
+        {
+            row.Notes = parts[5].Trim();
+        }
+
+        // Check for overlapping unavailabilities
+        var existingUnavailabilities = DbContext.ResourceUnavailabilities
+            .Where(u => u.ResourceId == row.ResourceId)
+            .AsEnumerable()
+            .Where(u => row.StartDate <= u.EndDate && row.EndDate >= u.StartDate)
+            .FirstOrDefault();
+
+        if (existingUnavailabilities != null)
+        {
+            row.ErrorMessage = $"Overlaps with existing unavailability ({existingUnavailabilities.StartDate:MMM dd} - {existingUnavailabilities.EndDate:MMM dd}).";
+            return row;
+        }
+
+        row.IsValid = true;
+        return row;
+    }
+
+    private string[] SplitCsvLine(string line)
+    {
+        var result = new List<string>();
+        var current = new System.Text.StringBuilder();
+        bool inQuotes = false;
+
+        foreach (var c in line)
+        {
+            if (c == '"')
+            {
+                inQuotes = !inQuotes;
+            }
+            else if (c == ',' && !inQuotes)
+            {
+                result.Add(current.ToString());
+                current.Clear();
+            }
+            else
+            {
+                current.Append(c);
+            }
+        }
+        result.Add(current.ToString());
+
+        return result.ToArray();
+    }
+
+    private async Task ConfirmImport()
+    {
+        var validRows = importPreviewData.Where(r => r.IsValid).ToList();
+
+        foreach (var row in validRows)
+        {
+            var unavailability = new ResourceUnavailability
+            {
+                ResourceId = row.ResourceId!.Value,
+                StartDate = row.StartDate!.Value,
+                EndDate = row.EndDate!.Value,
+                Hours = row.Hours,
+                Reason = row.Reason,
+                Notes = row.Notes
+            };
+            DbContext.ResourceUnavailabilities.Add(unavailability);
+        }
+
+        await DbContext.SaveChangesAsync();
+        CloseImportModal();
+    }
+
+    private class ImportRowData
+    {
+        public string ResourceName { get; set; } = "";
+        public int? ResourceId { get; set; }
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+        public int Hours { get; set; } = 8;
+        public UnavailabilityReason Reason { get; set; } = UnavailabilityReason.PTO;
+        public string? Notes { get; set; }
+        public bool IsValid { get; set; } = false;
+        public string? ErrorMessage { get; set; }
+    }
 }

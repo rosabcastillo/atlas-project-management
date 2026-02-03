@@ -2111,6 +2111,77 @@ th.sortable.desc::after {
     font-size: 1rem;
 }
 
+/* ===== PAGE HEADER ACTIONS ===== */
+.page-header-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+/* ===== IMPORT MODAL STYLES ===== */
+.import-instructions {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.03) 0%, rgba(59, 130, 246, 0.03) 100%);
+    padding: 1rem;
+    border-radius: var(--border-radius-sm);
+    border: 1px solid rgba(124, 58, 237, 0.1);
+}
+
+.import-instructions code {
+    display: block;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+    overflow-x: auto;
+}
+
+.import-preview-table {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 0.75rem;
+    border: 1px solid #e5e7eb;
+    border-radius: var(--border-radius-sm);
+}
+
+.import-preview-table table {
+    margin: 0;
+    font-size: 0.8rem;
+}
+
+.import-preview-table th,
+.import-preview-table td {
+    padding: 0.5rem 0.75rem;
+    white-space: nowrap;
+}
+
+.row-error {
+    background: rgba(239, 68, 68, 0.05) !important;
+}
+
+.row-error td {
+    color: var(--danger);
+}
+
+.import-errors {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: rgba(239, 68, 68, 0.05);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--border-radius-sm);
+    font-size: 0.85rem;
+}
+
+.import-errors ul {
+    margin: 0.5rem 0 0 1.25rem;
+    padding: 0;
+}
+
+.import-errors li {
+    color: var(--danger);
+    margin-bottom: 0.25rem;
+}
+
 /* ===== UNAVAILABILITY MANAGEMENT STYLES ===== */
 
 /* Unavailability Modal Form */
