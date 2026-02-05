@@ -1,4 +1,4 @@
-# Atlas - Project Management
+# Nova - Project Management
 
 A modern project management application for tracking resources, projects, and allocations built with .NET 8 and Blazor Server.
 

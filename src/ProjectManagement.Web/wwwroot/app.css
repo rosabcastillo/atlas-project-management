@@ -1278,9 +1278,12 @@ tr:hover td {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
-    font-weight: 700;
-    font-size: 1.5rem;
+    box-shadow: 0 0 20px rgba(124, 58, 237, 0.4);
+}
+
+.logo-icon .nova-svg {
+    width: 26px;
+    height: 26px;
 }
 
 .logo-text {
@@ -2028,8 +2031,20 @@ th.sortable.desc::after {
 }
 
 .login-logo {
-    font-size: 3rem;
-    margin-bottom: 0.5rem;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 1rem auto;
+    background: var(--primary-gradient);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 40px rgba(124, 58, 237, 0.5), 0 10px 30px rgba(124, 58, 237, 0.3);
+}
+
+.login-logo .nova-svg {
+    width: 50px;
+    height: 50px;
 }
 
 .login-title {
