@@ -238,10 +238,20 @@
                 <div class="form-group">
                     <label class="form-label">Project Name *</label>
                     <input type="text" class="form-control" @bind="currentProject.Name" />
+                    @if (!string.IsNullOrEmpty(projectError))
+                    {
+                        <div class="text-danger" style="margin-top: 0.25rem; font-size: 0.875rem;">@projectError</div>
+                    }
                 </div>
                 <div class="form-group">
                     <label class="form-label">Accountable Lead</label>
-                    <input type="text" class="form-control" @bind="currentProject.AccountableLead" />
+                    <select class="form-control" @bind="currentProject.AccountableLead">
+                        <option value="">Select...</option>
+                        @foreach (var resource in leadResources)
+                        {
+                            <option value="@resource.Name">@resource.Name (@resource.Role.Name)</option>
+                        }
+                    </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Delivery Method</label>
@@ -392,6 +402,7 @@
 
     private List<Project> projects = new();
     private List<ProjectStatus> statuses = new();
+    private List<Resource> leadResources = new();
     private string searchTerm = "";
     private HashSet<int> filterStatusIds = new();
     private HashSet<string> filterLeads = new();
@@ -404,6 +415,7 @@
     private Allocation? draggedAllocation = null;
     private int? dropTargetProjectId = null;
     private bool showMoveModal = false;
+    private string? projectError = null;
     private Allocation? allocationToMove = null;
     private int targetProjectIdForMove = 0;
     private string targetProjectName = "";
@@ -485,10 +497,22 @@
 
     private string GetSortClass(string column) => sortColumn == column ? (sortAscending ? "asc" : "desc") : "";
 
+    private static readonly string[] LeadRoleNames = { "product owner", "scrum master", "ba" };
+
     protected override async Task OnInitializedAsync()
     {
         statuses = await DbContext.ProjectStatuses.OrderBy(s => s.DisplayOrder).ToListAsync();
+        await LoadLeadResources();
         await LoadProjects();
+    }
+
+    private async Task LoadLeadResources()
+    {
+        leadResources = await DbContext.Resources
+            .Include(r => r.Role)
+            .Where(r => LeadRoleNames.Contains(r.Role.Name.ToLower()))
+            .OrderBy(r => r.Name)
+            .ToListAsync();
     }
 
     private async Task LoadProjects()
@@ -515,6 +539,7 @@
         selectedPriority = "";
         selectedStatusId = 0;
         isEditing = false;
+        projectError = null;
         showModal = true;
     }
 
@@ -533,18 +558,30 @@
         selectedPriority = project.Priority?.ToString() ?? "";
         selectedStatusId = project.StatusId ?? 0;
         isEditing = true;
+        projectError = null;
         showModal = true;
     }
 
     private void CloseModal()
     {
+        projectError = null;
         showModal = false;
     }
 
     private async Task SaveProject()
     {
+        projectError = null;
         if (string.IsNullOrWhiteSpace(currentProject.Name))
             return;
+
+        var nameToCheck = currentProject.Name.Trim().ToLower();
+        var duplicate = await DbContext.Projects
+            .AnyAsync(p => p.Name.ToLower() == nameToCheck && (!isEditing || p.Id != currentProject.Id));
+        if (duplicate)
+        {
+            projectError = "A project with this name already exists.";
+            return;
+        }
 
         currentProject.DeliveryMethod = string.IsNullOrEmpty(selectedDeliveryMethod)
             ? null

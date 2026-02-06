@@ -134,6 +134,10 @@
                 <div class="form-group">
                     <label class="form-label">Name *</label>
                     <input type="text" class="form-control" @bind="currentResource.Name" />
+                    @if (!string.IsNullOrEmpty(resourceError))
+                    {
+                        <div class="text-danger" style="margin-top: 0.25rem; font-size: 0.875rem;">@resourceError</div>
+                    }
                 </div>
                 <div class="form-group">
                     <label class="form-label">Role *</label>
@@ -415,6 +419,7 @@
     private ResourceUnavailability currentUnavailability = new();
     private bool isEditingUnavailability = false;
     private string? unavailabilityError = null;
+    private string? resourceError = null;
 
     // Pagination & Sorting
     private int currentPage = 1;
@@ -512,6 +517,7 @@
         selectedVendorId = 0;
         selectedSkillIds = new HashSet<int>();
         isEditing = false;
+        resourceError = null;
         showModal = true;
     }
 
@@ -522,10 +528,11 @@
         selectedVendorId = resource.VendorId ?? 0;
         selectedSkillIds = resource.ResourceSkills.Select(rs => rs.SkillId).ToHashSet();
         isEditing = true;
+        resourceError = null;
         showModal = true;
     }
 
-    private void CloseModal() => showModal = false;
+    private void CloseModal() { resourceError = null; showModal = false; }
 
     private void ToggleSkill(int skillId)
     {
@@ -535,7 +542,17 @@
 
     private async Task SaveResource()
     {
+        resourceError = null;
         if (string.IsNullOrWhiteSpace(currentResource.Name) || selectedRoleId == 0) return;
+
+        var nameToCheck = currentResource.Name.Trim().ToLower();
+        var duplicate = await DbContext.Resources
+            .AnyAsync(r => r.Name.ToLower() == nameToCheck && (!isEditing || r.Id != currentResource.Id));
+        if (duplicate)
+        {
+            resourceError = "A resource with this name already exists.";
+            return;
+        }
 
         currentResource.RoleId = selectedRoleId;
         currentResource.VendorId = selectedVendorId == 0 ? null : selectedVendorId;

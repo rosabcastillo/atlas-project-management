@@ -72,6 +72,10 @@
                 <div class="form-group">
                     <label class="form-label">Vendor Name *</label>
                     <input type="text" class="form-control" @bind="currentVendor.Name" />
+                    @if (!string.IsNullOrEmpty(vendorError))
+                    {
+                        <div class="text-danger" style="margin-top: 0.25rem; font-size: 0.875rem;">@vendorError</div>
+                    }
                 </div>
             </div>
             <div class="modal-footer">
@@ -87,6 +91,7 @@
     private bool showModal = false;
     private bool isEditing = false;
     private Vendor currentVendor = new();
+    private string? vendorError = null;
 
     // Pagination & Sorting
     private int currentPage = 1;
@@ -149,6 +154,7 @@
     {
         currentVendor = new Vendor();
         isEditing = false;
+        vendorError = null;
         showModal = true;
     }
 
@@ -156,14 +162,25 @@
     {
         currentVendor = new Vendor { Id = vendor.Id, Name = vendor.Name };
         isEditing = true;
+        vendorError = null;
         showModal = true;
     }
 
-    private void CloseModal() => showModal = false;
+    private void CloseModal() { vendorError = null; showModal = false; }
 
     private async Task SaveVendor()
     {
+        vendorError = null;
         if (string.IsNullOrWhiteSpace(currentVendor.Name)) return;
+
+        var nameToCheck = currentVendor.Name.Trim().ToLower();
+        var duplicate = await DbContext.Vendors
+            .AnyAsync(v => v.Name.ToLower() == nameToCheck && (!isEditing || v.Id != currentVendor.Id));
+        if (duplicate)
+        {
+            vendorError = "A vendor with this name already exists.";
+            return;
+        }
 
         if (isEditing)
         {

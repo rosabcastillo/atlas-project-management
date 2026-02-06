@@ -83,6 +83,10 @@
                 <div class="form-group">
                     <label class="form-label">Role Name *</label>
                     <input type="text" class="form-control" @bind="currentRole.Name" />
+                    @if (!string.IsNullOrEmpty(roleError))
+                    {
+                        <div class="text-danger" style="margin-top: 0.25rem; font-size: 0.875rem;">@roleError</div>
+                    }
                 </div>
                 <div class="form-group">
                     <div class="checkbox-wrapper">
@@ -107,6 +111,7 @@
     private bool showModal = false;
     private bool isEditing = false;
     private Role currentRole = new();
+    private string? roleError = null;
 
     // Pagination & Sorting
     private int currentPage = 1;
@@ -170,6 +175,7 @@
     {
         currentRole = new Role();
         isEditing = false;
+        roleError = null;
         showModal = true;
     }
 
@@ -177,14 +183,25 @@
     {
         currentRole = new Role { Id = role.Id, Name = role.Name, RequiresCapacity = role.RequiresCapacity };
         isEditing = true;
+        roleError = null;
         showModal = true;
     }
 
-    private void CloseModal() => showModal = false;
+    private void CloseModal() { roleError = null; showModal = false; }
 
     private async Task SaveRole()
     {
+        roleError = null;
         if (string.IsNullOrWhiteSpace(currentRole.Name)) return;
+
+        var nameToCheck = currentRole.Name.Trim().ToLower();
+        var duplicate = await DbContext.Roles
+            .AnyAsync(r => r.Name.ToLower() == nameToCheck && (!isEditing || r.Id != currentRole.Id));
+        if (duplicate)
+        {
+            roleError = "A role with this name already exists.";
+            return;
+        }
 
         if (isEditing)
         {

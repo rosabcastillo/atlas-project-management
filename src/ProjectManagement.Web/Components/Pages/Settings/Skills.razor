@@ -66,6 +66,10 @@
                 <div class="form-group">
                     <label class="form-label">Skill Name *</label>
                     <input type="text" class="form-control" @bind="currentSkill.Name" />
+                    @if (!string.IsNullOrEmpty(skillError))
+                    {
+                        <div class="text-danger" style="margin-top: 0.25rem; font-size: 0.875rem;">@skillError</div>
+                    }
                 </div>
             </div>
             <div class="modal-footer">
@@ -82,6 +86,7 @@
     private bool showModal = false;
     private bool isEditing = false;
     private Skill currentSkill = new();
+    private string? skillError = null;
 
     private IEnumerable<Skill> FilteredSkills => string.IsNullOrWhiteSpace(searchTerm)
         ? skills
@@ -104,6 +109,7 @@
     {
         currentSkill = new Skill();
         isEditing = false;
+        skillError = null;
         showModal = true;
     }
 
@@ -115,18 +121,30 @@
             Name = skill.Name
         };
         isEditing = true;
+        skillError = null;
         showModal = true;
     }
 
     private void CloseModal()
     {
+        skillError = null;
         showModal = false;
     }
 
     private async Task SaveSkill()
     {
+        skillError = null;
         if (string.IsNullOrWhiteSpace(currentSkill.Name))
             return;
+
+        var nameToCheck = currentSkill.Name.Trim().ToLower();
+        var duplicate = await DbContext.Skills
+            .AnyAsync(s => s.Name.ToLower() == nameToCheck && (!isEditing || s.Id != currentSkill.Id));
+        if (duplicate)
+        {
+            skillError = "A skill with this name already exists.";
+            return;
+        }
 
         if (isEditing)
         {
