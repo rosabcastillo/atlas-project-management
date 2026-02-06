@@ -200,9 +200,9 @@
                                     </button>
                                 }
                                 <span class="timeline-label-name" title="@BuildProjectLabelTooltip(tp)">@tp.ProjectName</span>
-                                @if (tp.Health.HasValue)
+                                @if (tp.HealthName != null)
                                 {
-                                    <span class="badge badge-sm timeline-health @GetHealthClass(tp.Health.Value)">@GetHealthShort(tp.Health.Value)</span>
+                                    <span class="badge badge-sm timeline-health" style="background-color: @tp.HealthColor;">@tp.HealthShort</span>
                                 }
                             </div>
                             <div class="timeline-bar-area">
@@ -512,6 +512,7 @@
         projects = await DbContext.Projects
             .Include(p => p.Theme)
             .Include(p => p.Status)
+            .Include(p => p.Health)
             .OrderBy(p => p.Name)
             .ToListAsync();
 
@@ -844,7 +845,9 @@
             {
                 ProjectId = projectId,
                 ProjectName = project.Name,
-                Health = project.Health,
+                HealthName = project.Health?.Name,
+                HealthColor = project.Health?.Color ?? "#6b7280",
+                HealthShort = GetHealthShortName(project.Health?.Name),
                 Color = GetProjectColor(projectId),
                 PilotGoLiveDate = project.TargetPilotGoLiveDate,
                 EnterpriseGoLiveDate = project.TargetEnterpriseGoLiveDate
@@ -989,38 +992,22 @@
             text += $"\nPilot Go-Live: {tp.PilotGoLiveDate.Value:MMM dd, yyyy}";
         if (tp.EnterpriseGoLiveDate.HasValue)
             text += $"\nEnterprise Go-Live: {tp.EnterpriseGoLiveDate.Value:MMM dd, yyyy}";
-        if (tp.Health.HasValue)
-            text += $"\nHealth: {GetHealthDisplayName(tp.Health.Value)}";
+        if (tp.HealthName != null)
+            text += $"\nHealth: {tp.HealthName}";
         return text;
     }
 
-    // Health helpers
-    private string GetHealthDisplayName(Health health) => health switch
+    private string GetHealthShortName(string? healthName)
     {
-        Health.OnTarget => "On Target",
-        Health.AtRiskOfDelay => "At Risk",
-        Health.Delayed => "Delayed",
-        Health.Completed => "Completed",
-        _ => health.ToString()
-    };
-
-    private string GetHealthShort(Health health) => health switch
-    {
-        Health.OnTarget => "OK",
-        Health.AtRiskOfDelay => "Risk",
-        Health.Delayed => "Late",
-        Health.Completed => "Done",
-        _ => health.ToString()
-    };
-
-    private string GetHealthClass(Health health) => health switch
-    {
-        Health.OnTarget => "badge-success",
-        Health.AtRiskOfDelay => "badge-warning",
-        Health.Delayed => "badge-danger",
-        Health.Completed => "badge-info",
-        _ => "badge-secondary"
-    };
+        if (healthName == null) return "";
+        // Abbreviate common health names for compact display
+        if (healthName.Contains("Target", StringComparison.OrdinalIgnoreCase)) return "OK";
+        if (healthName.Contains("Risk", StringComparison.OrdinalIgnoreCase)) return "Risk";
+        if (healthName.Contains("Delay", StringComparison.OrdinalIgnoreCase)) return "Late";
+        if (healthName.Contains("Complete", StringComparison.OrdinalIgnoreCase)) return "Done";
+        // For custom health names, take first 4 chars
+        return healthName.Length > 4 ? healthName[..4] : healthName;
+    }
 
     // ===== Display Classes =====
 
@@ -1050,7 +1037,9 @@
     {
         public int ProjectId { get; set; }
         public string ProjectName { get; set; } = "";
-        public Health? Health { get; set; }
+        public string? HealthName { get; set; }
+        public string HealthColor { get; set; } = "#6b7280";
+        public string HealthShort { get; set; } = "";
         public string Color { get; set; } = "";
         public DateTime EarliestStart { get; set; }
         public DateTime LatestEnd { get; set; }

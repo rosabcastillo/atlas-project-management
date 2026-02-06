@@ -96,7 +96,7 @@ namespace ProjectManagement.Infrastructure.Migrations
                     b.Property<int?>("DeliveryMethod")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("Health")
+                    b.Property<int?>("HealthId")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Name")
@@ -120,6 +120,8 @@ namespace ProjectManagement.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("HealthId");
+
                     b.HasIndex("Name")
                         .IsUnique();
 
@@ -128,6 +130,31 @@ namespace ProjectManagement.Infrastructure.Migrations
                     b.HasIndex("ThemeId");
 
                     b.ToTable("Projects");
+                });
+
+            modelBuilder.Entity("ProjectManagement.Domain.Entities.ProjectHealth", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("ProjectHealths");
                 });
 
             modelBuilder.Entity("ProjectManagement.Domain.Entities.ProjectStatus", b =>
@@ -340,6 +367,10 @@ namespace ProjectManagement.Infrastructure.Migrations
 
             modelBuilder.Entity("ProjectManagement.Domain.Entities.Project", b =>
                 {
+                    b.HasOne("ProjectManagement.Domain.Entities.ProjectHealth", "Health")
+                        .WithMany("Projects")
+                        .HasForeignKey("HealthId");
+
                     b.HasOne("ProjectManagement.Domain.Entities.ProjectStatus", "Status")
                         .WithMany("Projects")
                         .HasForeignKey("StatusId");
@@ -347,6 +378,8 @@ namespace ProjectManagement.Infrastructure.Migrations
                     b.HasOne("ProjectManagement.Domain.Entities.Theme", "Theme")
                         .WithMany("Projects")
                         .HasForeignKey("ThemeId");
+
+                    b.Navigation("Health");
 
                     b.Navigation("Status");
 
@@ -403,6 +436,11 @@ namespace ProjectManagement.Infrastructure.Migrations
             modelBuilder.Entity("ProjectManagement.Domain.Entities.Project", b =>
                 {
                     b.Navigation("Allocations");
+                });
+
+            modelBuilder.Entity("ProjectManagement.Domain.Entities.ProjectHealth", b =>
+                {
+                    b.Navigation("Projects");
                 });
 
             modelBuilder.Entity("ProjectManagement.Domain.Entities.ProjectStatus", b =>

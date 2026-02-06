@@ -1,0 +1,248 @@
+@page "/settings/healths"
+@using Microsoft.EntityFrameworkCore
+@using ProjectManagement.Infrastructure.Data
+@using ProjectManagement.Domain.Entities
+@inject AppDbContext DbContext
+@rendermode InteractiveServer
+
+<PageTitle>Project Health - Settings</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Project Health</h1>
+        <p class="page-subtitle">Manage project health options and their colors</p>
+    </div>
+    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Health</button>
+</div>
+
+<div class="glass-card">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th class="sortable @(GetSortClass("Order"))" @onclick='() => SetSort("Order")'>Order</th>
+                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")'>Health Name</th>
+                    <th>Color</th>
+                    <th>Preview</th>
+                    <th class="sortable @(GetSortClass("Projects"))" @onclick='() => SetSort("Projects")'>Projects</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var health in PagedHealths)
+                {
+                    <tr>
+                        <td>@health.DisplayOrder</td>
+                        <td><strong>@health.Name</strong></td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <div style="width: 24px; height: 24px; border-radius: 4px; background-color: @health.Color;"></div>
+                                <code style="font-size: 0.75rem;">@health.Color</code>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="status-badge" style="background-color: @health.Color;">@health.Name</span>
+                        </td>
+                        <td>@health.Projects.Count</td>
+                        <td>
+                            <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(health)">Edit</button>
+                            @if (health.Projects.Count == 0)
+                            {
+                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteHealth(health)">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (TotalPages > 1)
+    {
+        <div class="pagination">
+            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(1)">First</button>
+            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)">Prev</button>
+            @foreach (var pageNum in GetPageNumbers())
+            {
+                <button class="pagination-btn @(pageNum == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">@pageNum</button>
+            }
+            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(currentPage + 1)">Next</button>
+            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)">Last</button>
+            <span class="pagination-info">Showing @(((currentPage - 1) * pageSize) + 1)-@(Math.Min(currentPage * pageSize, TotalCount)) of @TotalCount</span>
+        </div>
+    }
+</div>
+
+@if (showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3 class="modal-title">@(isEditing ? "Edit Health" : "Add Health")</h3>
+                <button class="modal-close" @onclick="CloseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Health Name *</label>
+                    <input type="text" class="form-control" @bind="currentHealth.Name" />
+                    @if (!string.IsNullOrEmpty(healthError))
+                    {
+                        <div class="text-danger" style="margin-top: 0.25rem; font-size: 0.875rem;">@healthError</div>
+                    }
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Display Order</label>
+                    <input type="number" class="form-control" @bind="currentHealth.DisplayOrder" min="1" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Color</label>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <input type="color" class="form-control" style="width: 60px; height: 40px; padding: 2px;" @bind="currentHealth.Color" />
+                        <input type="text" class="form-control" style="width: 120px;" @bind="currentHealth.Color" placeholder="#000000" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Preview</label>
+                    <div>
+                        <span class="status-badge" style="background-color: @currentHealth.Color;">@(string.IsNullOrEmpty(currentHealth.Name) ? "Health Name" : currentHealth.Name)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveHealth">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ProjectHealth> healths = new();
+    private bool showModal = false;
+    private bool isEditing = false;
+    private ProjectHealth currentHealth = new();
+    private string? healthError = null;
+
+    // Pagination & Sorting
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private string sortColumn = "Order";
+    private bool sortAscending = true;
+
+    private IEnumerable<ProjectHealth> SortedHealths
+    {
+        get
+        {
+            return sortColumn switch
+            {
+                "Order" => sortAscending ? healths.OrderBy(h => h.DisplayOrder) : healths.OrderByDescending(h => h.DisplayOrder),
+                "Name" => sortAscending ? healths.OrderBy(h => h.Name) : healths.OrderByDescending(h => h.Name),
+                "Projects" => sortAscending ? healths.OrderBy(h => h.Projects.Count) : healths.OrderByDescending(h => h.Projects.Count),
+                _ => healths.OrderBy(h => h.DisplayOrder)
+            };
+        }
+    }
+
+    private IEnumerable<ProjectHealth> PagedHealths => SortedHealths.Skip((currentPage - 1) * pageSize).Take(pageSize);
+    private int TotalCount => healths.Count;
+    private int TotalPages => (int)Math.Ceiling(TotalCount / (double)pageSize);
+
+    private void GoToPage(int pg) => currentPage = Math.Max(1, Math.Min(pg, TotalPages));
+
+    private void SetSort(string column)
+    {
+        if (sortColumn == column)
+            sortAscending = !sortAscending;
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+        currentPage = 1;
+    }
+
+    private string GetSortClass(string column) => sortColumn == column ? (sortAscending ? "asc" : "desc") : "";
+
+    private IEnumerable<int> GetPageNumbers()
+    {
+        var start = Math.Max(1, currentPage - 2);
+        var end = Math.Min(TotalPages, currentPage + 2);
+        if (end - start < 4) { if (start == 1) end = Math.Min(TotalPages, start + 4); else start = Math.Max(1, end - 4); }
+        return Enumerable.Range(start, end - start + 1);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadHealths();
+    }
+
+    private async Task LoadHealths()
+    {
+        healths = await DbContext.ProjectHealths.Include(h => h.Projects).OrderBy(h => h.DisplayOrder).ToListAsync();
+    }
+
+    private void OpenAddModal()
+    {
+        var maxOrder = healths.Any() ? healths.Max(h => h.DisplayOrder) : 0;
+        currentHealth = new ProjectHealth { DisplayOrder = maxOrder + 1, Color = "#6b7280" };
+        isEditing = false;
+        healthError = null;
+        showModal = true;
+    }
+
+    private void OpenEditModal(ProjectHealth health)
+    {
+        currentHealth = new ProjectHealth { Id = health.Id, Name = health.Name, Color = health.Color, DisplayOrder = health.DisplayOrder };
+        isEditing = true;
+        healthError = null;
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        healthError = null;
+        showModal = false;
+    }
+
+    private async Task SaveHealth()
+    {
+        healthError = null;
+        if (string.IsNullOrWhiteSpace(currentHealth.Name)) return;
+
+        var nameToCheck = currentHealth.Name.Trim().ToLower();
+        var duplicate = await DbContext.ProjectHealths
+            .AnyAsync(h => h.Name.ToLower() == nameToCheck && (!isEditing || h.Id != currentHealth.Id));
+        if (duplicate)
+        {
+            healthError = "A health status with this name already exists.";
+            return;
+        }
+
+        if (isEditing)
+        {
+            var existing = await DbContext.ProjectHealths.FindAsync(currentHealth.Id);
+            if (existing != null)
+            {
+                existing.Name = currentHealth.Name;
+                existing.Color = currentHealth.Color;
+                existing.DisplayOrder = currentHealth.DisplayOrder;
+                await DbContext.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            DbContext.ProjectHealths.Add(currentHealth);
+            await DbContext.SaveChangesAsync();
+        }
+
+        await LoadHealths();
+        CloseModal();
+    }
+
+    private async Task DeleteHealth(ProjectHealth health)
+    {
+        DbContext.ProjectHealths.Remove(health);
+        await DbContext.SaveChangesAsync();
+        await LoadHealths();
+    }
+}

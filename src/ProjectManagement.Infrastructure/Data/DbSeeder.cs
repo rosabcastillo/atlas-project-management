@@ -27,17 +27,31 @@ public static class DbSeeder
         if (await context.Roles.AnyAsync())
             return;
 
+        // Seed Project Healths
+        if (!await context.ProjectHealths.AnyAsync())
+        {
+            var healths = new List<ProjectHealth>
+            {
+                new() { Name = "On Target", Color = "#10b981", DisplayOrder = 1 },
+                new() { Name = "At Risk of Delay", Color = "#f59e0b", DisplayOrder = 2 },
+                new() { Name = "Delayed", Color = "#ef4444", DisplayOrder = 3 },
+                new() { Name = "Completed", Color = "#3b82f6", DisplayOrder = 4 }
+            };
+            await context.ProjectHealths.AddRangeAsync(healths);
+            await context.SaveChangesAsync();
+        }
+
         // Seed Project Statuses
         var statuses = new List<ProjectStatus>
         {
             new() { Name = "Not Yet Started", Color = "#6b7280", DisplayOrder = 1 },  // Gray
             new() { Name = "Refinement", Color = "#8b5cf6", DisplayOrder = 2 },       // Purple
-            new() { Name = "In Progress", Color = "#3b82f6", DisplayOrder = 3 },      // Blue
-            new() { Name = "Ready for Pilot", Color = "#f59e0b", DisplayOrder = 4 },  // Amber
+            new() { Name = "In Progress", Color = "#2563eb", DisplayOrder = 3 },      // Blue
+            new() { Name = "Ready for Pilot", Color = "#eab308", DisplayOrder = 4 },  // Yellow
             new() { Name = "Pilot", Color = "#f97316", DisplayOrder = 5 },            // Orange
-            new() { Name = "Launched", Color = "#10b981", DisplayOrder = 6 },         // Green
+            new() { Name = "Launched", Color = "#059669", DisplayOrder = 6 },         // Green
             new() { Name = "Support", Color = "#06b6d4", DisplayOrder = 7 },          // Cyan
-            new() { Name = "On Hold", Color = "#ef4444", DisplayOrder = 8 }           // Red
+            new() { Name = "On Hold", Color = "#dc2626", DisplayOrder = 8 }           // Red
         };
         await context.ProjectStatuses.AddRangeAsync(statuses);
         await context.SaveChangesAsync();

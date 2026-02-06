@@ -161,9 +161,9 @@
                                 }
                             </td>
                             <td>
-                                @if (project.Health.HasValue)
+                                @if (project.Health != null)
                                 {
-                                    <span class="badge @GetHealthClass(project.Health.Value)">@GetHealthDisplayName(project.Health.Value)</span>
+                                    <span class="status-badge" style="background-color: @project.Health.Color;">@project.Health.Name</span>
                                 }
                                 else
                                 {
@@ -284,12 +284,12 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Health</label>
-                    <select class="form-control" @bind="selectedHealth">
-                        <option value="">Select...</option>
-                        <option value="OnTarget">On Target</option>
-                        <option value="AtRiskOfDelay">At Risk of Delay</option>
-                        <option value="Delayed">Delayed</option>
-                        <option value="Completed">Completed</option>
+                    <select class="form-control" @bind="selectedHealthId">
+                        <option value="0">Select health...</option>
+                        @foreach (var health in healths)
+                        {
+                            <option value="@health.Id">@health.Name</option>
+                        }
                     </select>
                 </div>
                 <div class="form-group">
@@ -421,9 +421,9 @@
                 }
             </td>
             <td>
-                @if (project.Health.HasValue)
+                @if (project.Health != null)
                 {
-                    <span class="badge @GetHealthClass(project.Health.Value)">@GetHealthDisplayName(project.Health.Value)</span>
+                    <span class="status-badge" style="background-color: @project.Health.Color;">@project.Health.Name</span>
                 }
                 else
                 {
@@ -442,6 +442,7 @@
     private List<Project> projects = new();
     private List<ProjectStatus> statuses = new();
     private List<Theme> themes = new();
+    private List<ProjectHealth> healths = new();
     private List<Resource> leadResources = new();
     private string searchTerm = "";
     private HashSet<int> filterStatusIds = new();
@@ -469,7 +470,7 @@
     private string selectedPriority = "";
     private int selectedStatusId = 0;
     private int selectedThemeId = 0;
-    private string selectedHealth = "";
+    private int selectedHealthId = 0;
     private DateTime? selectedPilotDate;
     private DateTime? selectedEnterpriseDate;
 
@@ -507,7 +508,7 @@
                 "Name" => sortAscending ? data.OrderBy(p => p.Name) : data.OrderByDescending(p => p.Name),
                 "Status" => sortAscending ? data.OrderBy(p => p.Status?.DisplayOrder ?? int.MaxValue) : data.OrderByDescending(p => p.Status?.DisplayOrder ?? 0),
                 "Theme" => sortAscending ? data.OrderBy(p => p.Theme?.Name ?? "zzz") : data.OrderByDescending(p => p.Theme?.Name ?? ""),
-                "Health" => sortAscending ? data.OrderBy(p => (int?)p.Health ?? int.MaxValue) : data.OrderByDescending(p => (int?)p.Health ?? int.MinValue),
+                "Health" => sortAscending ? data.OrderBy(p => p.Health?.DisplayOrder ?? int.MaxValue) : data.OrderByDescending(p => p.Health?.DisplayOrder ?? 0),
                 "Lead" => sortAscending ? data.OrderBy(p => p.AccountableLead ?? "zzz") : data.OrderByDescending(p => p.AccountableLead ?? ""),
                 "Method" => sortAscending ? data.OrderBy(p => p.DeliveryMethod?.ToString() ?? "zzz") : data.OrderByDescending(p => p.DeliveryMethod?.ToString() ?? ""),
                 "Priority" => sortAscending ? data.OrderBy(p => (int?)p.Priority ?? int.MaxValue) : data.OrderByDescending(p => (int?)p.Priority ?? int.MinValue),
@@ -552,6 +553,7 @@
     {
         statuses = await DbContext.ProjectStatuses.OrderBy(s => s.DisplayOrder).ToListAsync();
         themes = await DbContext.Themes.OrderBy(t => t.Name).ToListAsync();
+        healths = await DbContext.ProjectHealths.OrderBy(h => h.DisplayOrder).ToListAsync();
         await LoadLeadResources();
         await LoadProjects();
     }
@@ -570,6 +572,7 @@
         projects = await DbContext.Projects
             .Include(p => p.Status)
             .Include(p => p.Theme)
+            .Include(p => p.Health)
             .Include(p => p.Allocations)
                 .ThenInclude(a => a.Resource)
                     .ThenInclude(r => r.Role)
@@ -590,7 +593,7 @@
         selectedPriority = "";
         selectedStatusId = 0;
         selectedThemeId = 0;
-        selectedHealth = "";
+        selectedHealthId = 0;
         selectedPilotDate = null;
         selectedEnterpriseDate = null;
         isEditing = false;
@@ -609,7 +612,7 @@
             Priority = project.Priority,
             StatusId = project.StatusId,
             ThemeId = project.ThemeId,
-            Health = project.Health,
+            HealthId = project.HealthId,
             TargetPilotGoLiveDate = project.TargetPilotGoLiveDate,
             TargetEnterpriseGoLiveDate = project.TargetEnterpriseGoLiveDate
         };
@@ -617,7 +620,7 @@
         selectedPriority = project.Priority?.ToString() ?? "";
         selectedStatusId = project.StatusId ?? 0;
         selectedThemeId = project.ThemeId ?? 0;
-        selectedHealth = project.Health?.ToString() ?? "";
+        selectedHealthId = project.HealthId ?? 0;
         selectedPilotDate = project.TargetPilotGoLiveDate;
         selectedEnterpriseDate = project.TargetEnterpriseGoLiveDate;
         isEditing = true;
@@ -654,9 +657,7 @@
             : Enum.Parse<Priority>(selectedPriority);
         currentProject.StatusId = selectedStatusId == 0 ? null : selectedStatusId;
         currentProject.ThemeId = selectedThemeId == 0 ? null : selectedThemeId;
-        currentProject.Health = string.IsNullOrEmpty(selectedHealth)
-            ? null
-            : Enum.Parse<Health>(selectedHealth);
+        currentProject.HealthId = selectedHealthId == 0 ? null : selectedHealthId;
         currentProject.TargetPilotGoLiveDate = selectedPilotDate;
         currentProject.TargetEnterpriseGoLiveDate = selectedEnterpriseDate;
 
@@ -671,7 +672,7 @@
                 existing.Priority = currentProject.Priority;
                 existing.StatusId = currentProject.StatusId;
                 existing.ThemeId = currentProject.ThemeId;
-                existing.Health = currentProject.Health;
+                existing.HealthId = currentProject.HealthId;
                 existing.TargetPilotGoLiveDate = currentProject.TargetPilotGoLiveDate;
                 existing.TargetEnterpriseGoLiveDate = currentProject.TargetEnterpriseGoLiveDate;
                 await DbContext.SaveChangesAsync();
@@ -699,24 +700,6 @@
         Priority.High => "badge-danger",
         Priority.Medium => "badge-warning",
         Priority.Low => "badge-success",
-        _ => "badge-secondary"
-    };
-
-    private string GetHealthDisplayName(Health health) => health switch
-    {
-        Health.OnTarget => "On Target",
-        Health.AtRiskOfDelay => "At Risk of Delay",
-        Health.Delayed => "Delayed",
-        Health.Completed => "Completed",
-        _ => health.ToString()
-    };
-
-    private string GetHealthClass(Health health) => health switch
-    {
-        Health.OnTarget => "badge-success",
-        Health.AtRiskOfDelay => "badge-warning",
-        Health.Delayed => "badge-danger",
-        Health.Completed => "badge-info",
         _ => "badge-secondary"
     };
 
