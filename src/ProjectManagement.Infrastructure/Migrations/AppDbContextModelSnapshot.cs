@@ -17,7 +17,7 @@ namespace ProjectManagement.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.0");
 
-            modelBuilder.Entity("ProjectManagement.Domain.Entities.Allocation", b =>
+            modelBuilder.Entity("ProjectManagement.Domain.Entities.Admin", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -26,31 +26,29 @@ namespace ProjectManagement.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<int?>("Percentage")
-                        .HasColumnType("INTEGER");
+                    b.Property<string>("DisplayName")
+                        .HasColumnType("TEXT");
 
-                    b.Property<int>("PeriodId")
-                        .HasColumnType("INTEGER");
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("TEXT");
 
-                    b.Property<int>("ProjectId")
-                        .HasColumnType("INTEGER");
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
-                    b.Property<int>("ResourceId")
-                        .HasColumnType("INTEGER");
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PeriodId");
-
-                    b.HasIndex("ProjectId");
-
-                    b.HasIndex("ResourceId", "ProjectId", "PeriodId")
+                    b.HasIndex("Username")
                         .IsUnique();
 
-                    b.ToTable("Allocations");
+                    b.ToTable("Admins");
                 });
 
-            modelBuilder.Entity("ProjectManagement.Domain.Entities.Period", b =>
+            modelBuilder.Entity("ProjectManagement.Domain.Entities.Allocation", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -62,22 +60,25 @@ namespace ProjectManagement.Infrastructure.Migrations
                     b.Property<DateTime>("EndDate")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                    b.Property<int?>("Percentage")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ResourceId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("Type")
-                        .HasColumnType("INTEGER");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
-                        .IsUnique();
+                    b.HasIndex("ProjectId");
 
-                    b.ToTable("Periods");
+                    b.HasIndex("ResourceId", "StartDate", "EndDate");
+
+                    b.ToTable("Allocations");
                 });
 
             modelBuilder.Entity("ProjectManagement.Domain.Entities.Project", b =>
@@ -95,6 +96,9 @@ namespace ProjectManagement.Infrastructure.Migrations
                     b.Property<int?>("DeliveryMethod")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("Health")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -105,12 +109,23 @@ namespace ProjectManagement.Infrastructure.Migrations
                     b.Property<int?>("StatusId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("TargetEnterpriseGoLiveDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("TargetPilotGoLiveDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ThemeId")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Name")
                         .IsUnique();
 
                     b.HasIndex("StatusId");
+
+                    b.HasIndex("ThemeId");
 
                     b.ToTable("Projects");
                 });
@@ -186,6 +201,40 @@ namespace ProjectManagement.Infrastructure.Migrations
                     b.ToTable("ResourceSkills");
                 });
 
+            modelBuilder.Entity("ProjectManagement.Domain.Entities.ResourceUnavailability", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("EndDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Hours")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Reason")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ResourceId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("StartDate")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ResourceId", "StartDate", "EndDate");
+
+                    b.ToTable("ResourceUnavailabilities");
+                });
+
             modelBuilder.Entity("ProjectManagement.Domain.Entities.Role", b =>
                 {
                     b.Property<int>("Id")
@@ -231,6 +280,24 @@ namespace ProjectManagement.Infrastructure.Migrations
                     b.ToTable("Skills");
                 });
 
+            modelBuilder.Entity("ProjectManagement.Domain.Entities.Theme", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Themes");
+                });
+
             modelBuilder.Entity("ProjectManagement.Domain.Entities.Vendor", b =>
                 {
                     b.Property<int>("Id")
@@ -254,12 +321,6 @@ namespace ProjectManagement.Infrastructure.Migrations
 
             modelBuilder.Entity("ProjectManagement.Domain.Entities.Allocation", b =>
                 {
-                    b.HasOne("ProjectManagement.Domain.Entities.Period", "Period")
-                        .WithMany("Allocations")
-                        .HasForeignKey("PeriodId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("ProjectManagement.Domain.Entities.Project", "Project")
                         .WithMany("Allocations")
                         .HasForeignKey("ProjectId")
@@ -272,8 +333,6 @@ namespace ProjectManagement.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Period");
-
                     b.Navigation("Project");
 
                     b.Navigation("Resource");
@@ -285,7 +344,13 @@ namespace ProjectManagement.Infrastructure.Migrations
                         .WithMany("Projects")
                         .HasForeignKey("StatusId");
 
+                    b.HasOne("ProjectManagement.Domain.Entities.Theme", "Theme")
+                        .WithMany("Projects")
+                        .HasForeignKey("ThemeId");
+
                     b.Navigation("Status");
+
+                    b.Navigation("Theme");
                 });
 
             modelBuilder.Entity("ProjectManagement.Domain.Entities.Resource", b =>
@@ -324,9 +389,15 @@ namespace ProjectManagement.Infrastructure.Migrations
                     b.Navigation("Skill");
                 });
 
-            modelBuilder.Entity("ProjectManagement.Domain.Entities.Period", b =>
+            modelBuilder.Entity("ProjectManagement.Domain.Entities.ResourceUnavailability", b =>
                 {
-                    b.Navigation("Allocations");
+                    b.HasOne("ProjectManagement.Domain.Entities.Resource", "Resource")
+                        .WithMany("Unavailabilities")
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Resource");
                 });
 
             modelBuilder.Entity("ProjectManagement.Domain.Entities.Project", b =>
@@ -344,6 +415,8 @@ namespace ProjectManagement.Infrastructure.Migrations
                     b.Navigation("Allocations");
 
                     b.Navigation("ResourceSkills");
+
+                    b.Navigation("Unavailabilities");
                 });
 
             modelBuilder.Entity("ProjectManagement.Domain.Entities.Role", b =>
@@ -354,6 +427,11 @@ namespace ProjectManagement.Infrastructure.Migrations
             modelBuilder.Entity("ProjectManagement.Domain.Entities.Skill", b =>
                 {
                     b.Navigation("ResourceSkills");
+                });
+
+            modelBuilder.Entity("ProjectManagement.Domain.Entities.Theme", b =>
+                {
+                    b.Navigation("Projects");
                 });
 
             modelBuilder.Entity("ProjectManagement.Domain.Entities.Vendor", b =>

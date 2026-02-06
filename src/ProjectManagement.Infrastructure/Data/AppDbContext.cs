@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<ProjectStatus> ProjectStatuses => Set<ProjectStatus>();
     public DbSet<Allocation> Allocations => Set<Allocation>();
     public DbSet<ResourceUnavailability> ResourceUnavailabilities => Set<ResourceUnavailability>();
+    public DbSet<Theme> Themes => Set<Theme>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -83,6 +84,13 @@ public class AppDbContext : DbContext
             .HasForeignKey(p => p.StatusId)
             .IsRequired(false);
 
+        // Project - Theme relationship
+        modelBuilder.Entity<Project>()
+            .HasOne(p => p.Theme)
+            .WithMany(t => t.Projects)
+            .HasForeignKey(p => p.ThemeId)
+            .IsRequired(false);
+
         // Indexes
         modelBuilder.Entity<Admin>().HasIndex(a => a.Username).IsUnique();
         modelBuilder.Entity<Skill>().HasIndex(s => s.Name).IsUnique();
@@ -90,5 +98,6 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Vendor>().HasIndex(v => v.Name).IsUnique();
         modelBuilder.Entity<Project>().HasIndex(p => p.Name).IsUnique();
         modelBuilder.Entity<ProjectStatus>().HasIndex(s => s.Name).IsUnique();
+        modelBuilder.Entity<Theme>().HasIndex(t => t.Name).IsUnique();
     }
 }

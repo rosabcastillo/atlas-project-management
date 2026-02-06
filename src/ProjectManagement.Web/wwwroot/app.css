@@ -261,6 +261,10 @@ td .btn {
     margin-right: 0.4rem;
 }
 
+td:last-child {
+    white-space: nowrap;
+}
+
 td .btn:last-child {
     margin-right: 0;
 }
@@ -430,12 +434,18 @@ input[type="date"]::before {
 }
 
 /* Expandable project rows */
+.project-name-cell {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+
 .expand-btn {
     background: none;
     border: none;
     cursor: pointer;
     padding: 0.25rem 0.5rem;
-    margin-right: 0.5rem;
+    flex-shrink: 0;
     color: var(--primary-purple);
     font-size: 0.75rem;
     border-radius: 4px;
@@ -449,6 +459,7 @@ input[type="date"]::before {
 .expand-placeholder {
     display: inline-block;
     width: 1.75rem;
+    flex-shrink: 0;
 }
 
 .allocation-count {
@@ -1000,6 +1011,7 @@ tr:hover td {
     font-weight: 500;
     border-radius: 50px;
     gap: 0.25rem;
+    white-space: nowrap;
 }
 
 .badge-primary {
@@ -1025,6 +1037,11 @@ tr:hover td {
 .badge-secondary {
     background: #f3f4f6;
     color: var(--text-secondary);
+}
+
+.badge-info {
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--primary-blue);
 }
 
 .status-badge {
@@ -1131,7 +1148,7 @@ tr:hover td {
     border-radius: var(--border-radius);
     box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
     width: 100%;
-    max-width: 500px;
+    max-width: 600px;
     max-height: 90vh;
     overflow-y: auto;
     animation: modalSlideIn 0.3s ease;
@@ -1175,6 +1192,20 @@ tr:hover td {
 
 .modal-close:hover {
     color: var(--text-primary);
+}
+
+.modal-wide {
+    max-width: 800px;
+}
+
+.modal-wide .modal-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 1.5rem;
+}
+
+.modal-wide .form-group-full {
+    grid-column: 1 / -1;
 }
 
 .modal-body {

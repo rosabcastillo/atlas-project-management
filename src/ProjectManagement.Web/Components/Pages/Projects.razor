@@ -87,6 +87,7 @@
                 <option value="None">Projects Only</option>
                 <option value="Lead">Group by Lead</option>
                 <option value="Status">Group by Status</option>
+                <option value="Theme">Group by Theme</option>
             </select>
         </div>
     </div>
@@ -96,10 +97,12 @@
             <thead>
                 <tr>
                     <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")'>Project Name</th>
-                    <th class="sortable @(GetSortClass("Status"))" @onclick='() => SetSort("Status")'>Status</th>
                     <th class="sortable @(GetSortClass("Lead"))" @onclick='() => SetSort("Lead")'>Accountable Lead</th>
-                    <th class="sortable @(GetSortClass("Method"))" @onclick='() => SetSort("Method")'>Delivery Method</th>
-                    <th class="sortable @(GetSortClass("Priority"))" @onclick='() => SetSort("Priority")'>Priority</th>
+                    <th class="sortable @(GetSortClass("Status"))" @onclick='() => SetSort("Status")'>Status</th>
+                    <th class="sortable @(GetSortClass("Theme"))" @onclick='() => SetSort("Theme")'>Theme</th>
+                    <th class="sortable @(GetSortClass("Health"))" @onclick='() => SetSort("Health")'>Health</th>
+                    <th class="sortable @(GetSortClass("PilotDate"))" @onclick='() => SetSort("PilotDate")'>Pilot Go-Live</th>
+                    <th class="sortable @(GetSortClass("EnterpriseDate"))" @onclick='() => SetSort("EnterpriseDate")'>Enterprise Go-Live</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -116,22 +119,27 @@
                             @ondragleave="OnDragLeave"
                             @ondrop="() => OnDrop(project.Id)">
                             <td>
-                                @if (hasAllocations)
-                                {
-                                    <button class="expand-btn" @onclick="() => ToggleProject(project.Id)">
-                                        @(isExpanded ? "▼" : "▶")
-                                    </button>
-                                }
-                                else
-                                {
-                                    <span class="expand-placeholder"></span>
-                                }
-                                <strong>@project.Name</strong>
-                                @if (hasAllocations)
-                                {
-                                    <span class="allocation-count">(@project.Allocations.Count)</span>
-                                }
+                                <div class="project-name-cell">
+                                    @if (hasAllocations)
+                                    {
+                                        <button class="expand-btn" @onclick="() => ToggleProject(project.Id)">
+                                            @(isExpanded ? "▼" : "▶")
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="expand-placeholder"></span>
+                                    }
+                                    <span>
+                                        <strong>@project.Name</strong>
+                                        @if (hasAllocations)
+                                        {
+                                            <span class="allocation-count">(@project.Allocations.Count)</span>
+                                        }
+                                    </span>
+                                </div>
                             </td>
+                            <td>@FormatLeadName(project.AccountableLead)</td>
                             <td>
                                 @if (project.Status != null)
                                 {
@@ -142,11 +150,10 @@
                                     <span class="badge badge-secondary">Not set</span>
                                 }
                             </td>
-                            <td>@(project.AccountableLead ?? "-")</td>
                             <td>
-                                @if (project.DeliveryMethod.HasValue)
+                                @if (project.Theme != null)
                                 {
-                                    <span class="badge badge-primary">@project.DeliveryMethod</span>
+                                    <span class="badge badge-primary">@project.Theme.Name</span>
                                 }
                                 else
                                 {
@@ -154,15 +161,17 @@
                                 }
                             </td>
                             <td>
-                                @if (project.Priority.HasValue)
+                                @if (project.Health.HasValue)
                                 {
-                                    <span class="badge @GetPriorityClass(project.Priority.Value)">@project.Priority</span>
+                                    <span class="badge @GetHealthClass(project.Health.Value)">@GetHealthDisplayName(project.Health.Value)</span>
                                 }
                                 else
                                 {
                                     <span class="badge badge-secondary">Not set</span>
                                 }
                             </td>
+                            <td>@(project.TargetPilotGoLiveDate?.ToString("MMM dd, yyyy") ?? "-")</td>
+                            <td>@(project.TargetEnterpriseGoLiveDate?.ToString("MMM dd, yyyy") ?? "-")</td>
                             <td>
                                 <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(project)">Edit</button>
                                 <button class="btn btn-danger btn-sm" @onclick="() => DeleteProject(project)">Delete</button>
@@ -171,7 +180,7 @@
                         @if (isExpanded && hasAllocations)
                         {
                             <tr class="allocation-panel-row">
-                                <td colspan="6">
+                                <td colspan="8">
                                     <div class="allocation-panel">
                                         <div class="allocation-grid">
                                             @foreach (var allocation in project.Allocations.OrderBy(a => a.Resource.Name).ThenBy(a => a.StartDate))
@@ -209,7 +218,7 @@
                     @foreach (var group in GroupedProjects)
                     {
                         <tr class="group-header-row">
-                            <td colspan="6">
+                            <td colspan="8">
                                 <strong>@group.Key</strong>
                                 <span class="group-count">(@group.Count() projects)</span>
                             </td>
@@ -229,13 +238,13 @@
 @if (showModal)
 {
     <div class="modal-backdrop" @onclick="CloseModal">
-        <div class="modal" @onclick:stopPropagation="true">
+        <div class="modal modal-wide" @onclick:stopPropagation="true">
             <div class="modal-header">
                 <h3 class="modal-title">@(isEditing ? "Edit Project" : "Add Project")</h3>
                 <button class="modal-close" @onclick="CloseModal">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="form-group">
+                <div class="form-group form-group-full">
                     <label class="form-label">Project Name *</label>
                     <input type="text" class="form-control" @bind="currentProject.Name" />
                     @if (!string.IsNullOrEmpty(projectError))
@@ -254,14 +263,6 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Delivery Method</label>
-                    <select class="form-control" @bind="selectedDeliveryMethod">
-                        <option value="">Select...</option>
-                        <option value="Kanban">Kanban</option>
-                        <option value="Scrum">Scrum</option>
-                    </select>
-                </div>
-                <div class="form-group">
                     <label class="form-label">Status</label>
                     <select class="form-control" @bind="selectedStatusId">
                         <option value="0">Select status...</option>
@@ -272,6 +273,34 @@
                     </select>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Theme</label>
+                    <select class="form-control" @bind="selectedThemeId">
+                        <option value="0">Select theme...</option>
+                        @foreach (var theme in themes)
+                        {
+                            <option value="@theme.Id">@theme.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Health</label>
+                    <select class="form-control" @bind="selectedHealth">
+                        <option value="">Select...</option>
+                        <option value="OnTarget">On Target</option>
+                        <option value="AtRiskOfDelay">At Risk of Delay</option>
+                        <option value="Delayed">Delayed</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Delivery Method</label>
+                    <select class="form-control" @bind="selectedDeliveryMethod">
+                        <option value="">Select...</option>
+                        <option value="Kanban">Kanban</option>
+                        <option value="Scrum">Scrum</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label class="form-label">Priority</label>
                     <select class="form-control" @bind="selectedPriority">
                         <option value="">Select...</option>
@@ -279,6 +308,14 @@
                         <option value="Medium">Medium</option>
                         <option value="High">High</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Target Pilot Go-Live Date</label>
+                    <input type="date" class="form-control" @bind="selectedPilotDate" @bind:format="yyyy-MM-dd" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Target Enterprise Go-Live Date</label>
+                    <input type="date" class="form-control" @bind="selectedEnterpriseDate" @bind:format="yyyy-MM-dd" />
                 </div>
             </div>
             <div class="modal-footer">
@@ -362,6 +399,7 @@
     {
         <tr>
             <td><strong>@project.Name</strong></td>
+            <td>@FormatLeadName(project.AccountableLead)</td>
             <td>
                 @if (project.Status != null)
                 {
@@ -372,11 +410,10 @@
                     <span class="badge badge-secondary">Not set</span>
                 }
             </td>
-            <td>@(project.AccountableLead ?? "-")</td>
             <td>
-                @if (project.DeliveryMethod.HasValue)
+                @if (project.Theme != null)
                 {
-                    <span class="badge badge-primary">@project.DeliveryMethod</span>
+                    <span class="badge badge-primary">@project.Theme.Name</span>
                 }
                 else
                 {
@@ -384,15 +421,17 @@
                 }
             </td>
             <td>
-                @if (project.Priority.HasValue)
+                @if (project.Health.HasValue)
                 {
-                    <span class="badge @GetPriorityClass(project.Priority.Value)">@project.Priority</span>
+                    <span class="badge @GetHealthClass(project.Health.Value)">@GetHealthDisplayName(project.Health.Value)</span>
                 }
                 else
                 {
                     <span class="badge badge-secondary">Not set</span>
                 }
             </td>
+            <td>@(project.TargetPilotGoLiveDate?.ToString("MMM dd, yyyy") ?? "-")</td>
+            <td>@(project.TargetEnterpriseGoLiveDate?.ToString("MMM dd, yyyy") ?? "-")</td>
             <td>
                 <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(project)">Edit</button>
                 <button class="btn btn-danger btn-sm" @onclick="() => DeleteProject(project)">Delete</button>
@@ -402,6 +441,7 @@
 
     private List<Project> projects = new();
     private List<ProjectStatus> statuses = new();
+    private List<Theme> themes = new();
     private List<Resource> leadResources = new();
     private string searchTerm = "";
     private HashSet<int> filterStatusIds = new();
@@ -428,6 +468,10 @@
     private string selectedDeliveryMethod = "";
     private string selectedPriority = "";
     private int selectedStatusId = 0;
+    private int selectedThemeId = 0;
+    private string selectedHealth = "";
+    private DateTime? selectedPilotDate;
+    private DateTime? selectedEnterpriseDate;
 
     // Sorting
     private string sortColumn = "Name";
@@ -462,9 +506,13 @@
             {
                 "Name" => sortAscending ? data.OrderBy(p => p.Name) : data.OrderByDescending(p => p.Name),
                 "Status" => sortAscending ? data.OrderBy(p => p.Status?.DisplayOrder ?? int.MaxValue) : data.OrderByDescending(p => p.Status?.DisplayOrder ?? 0),
+                "Theme" => sortAscending ? data.OrderBy(p => p.Theme?.Name ?? "zzz") : data.OrderByDescending(p => p.Theme?.Name ?? ""),
+                "Health" => sortAscending ? data.OrderBy(p => (int?)p.Health ?? int.MaxValue) : data.OrderByDescending(p => (int?)p.Health ?? int.MinValue),
                 "Lead" => sortAscending ? data.OrderBy(p => p.AccountableLead ?? "zzz") : data.OrderByDescending(p => p.AccountableLead ?? ""),
                 "Method" => sortAscending ? data.OrderBy(p => p.DeliveryMethod?.ToString() ?? "zzz") : data.OrderByDescending(p => p.DeliveryMethod?.ToString() ?? ""),
                 "Priority" => sortAscending ? data.OrderBy(p => (int?)p.Priority ?? int.MaxValue) : data.OrderByDescending(p => (int?)p.Priority ?? int.MinValue),
+                "PilotDate" => sortAscending ? data.OrderBy(p => p.TargetPilotGoLiveDate ?? DateTime.MaxValue) : data.OrderByDescending(p => p.TargetPilotGoLiveDate ?? DateTime.MinValue),
+                "EnterpriseDate" => sortAscending ? data.OrderBy(p => p.TargetEnterpriseGoLiveDate ?? DateTime.MaxValue) : data.OrderByDescending(p => p.TargetEnterpriseGoLiveDate ?? DateTime.MinValue),
                 _ => data.OrderBy(p => p.Name)
             };
         }
@@ -479,6 +527,7 @@
             {
                 "Lead" => data.GroupBy(p => p.AccountableLead ?? "No Lead"),
                 "Status" => data.GroupBy(p => p.Status?.Name ?? "No Status"),
+                "Theme" => data.GroupBy(p => p.Theme?.Name ?? "No Theme"),
                 _ => data.GroupBy(p => "All")
             };
         }
@@ -502,6 +551,7 @@
     protected override async Task OnInitializedAsync()
     {
         statuses = await DbContext.ProjectStatuses.OrderBy(s => s.DisplayOrder).ToListAsync();
+        themes = await DbContext.Themes.OrderBy(t => t.Name).ToListAsync();
         await LoadLeadResources();
         await LoadProjects();
     }
@@ -519,6 +569,7 @@
     {
         projects = await DbContext.Projects
             .Include(p => p.Status)
+            .Include(p => p.Theme)
             .Include(p => p.Allocations)
                 .ThenInclude(a => a.Resource)
                     .ThenInclude(r => r.Role)
@@ -538,6 +589,10 @@
         selectedDeliveryMethod = "";
         selectedPriority = "";
         selectedStatusId = 0;
+        selectedThemeId = 0;
+        selectedHealth = "";
+        selectedPilotDate = null;
+        selectedEnterpriseDate = null;
         isEditing = false;
         projectError = null;
         showModal = true;
@@ -552,11 +607,19 @@
             AccountableLead = project.AccountableLead,
             DeliveryMethod = project.DeliveryMethod,
             Priority = project.Priority,
-            StatusId = project.StatusId
+            StatusId = project.StatusId,
+            ThemeId = project.ThemeId,
+            Health = project.Health,
+            TargetPilotGoLiveDate = project.TargetPilotGoLiveDate,
+            TargetEnterpriseGoLiveDate = project.TargetEnterpriseGoLiveDate
         };
         selectedDeliveryMethod = project.DeliveryMethod?.ToString() ?? "";
         selectedPriority = project.Priority?.ToString() ?? "";
         selectedStatusId = project.StatusId ?? 0;
+        selectedThemeId = project.ThemeId ?? 0;
+        selectedHealth = project.Health?.ToString() ?? "";
+        selectedPilotDate = project.TargetPilotGoLiveDate;
+        selectedEnterpriseDate = project.TargetEnterpriseGoLiveDate;
         isEditing = true;
         projectError = null;
         showModal = true;
@@ -590,6 +653,12 @@
             ? null
             : Enum.Parse<Priority>(selectedPriority);
         currentProject.StatusId = selectedStatusId == 0 ? null : selectedStatusId;
+        currentProject.ThemeId = selectedThemeId == 0 ? null : selectedThemeId;
+        currentProject.Health = string.IsNullOrEmpty(selectedHealth)
+            ? null
+            : Enum.Parse<Health>(selectedHealth);
+        currentProject.TargetPilotGoLiveDate = selectedPilotDate;
+        currentProject.TargetEnterpriseGoLiveDate = selectedEnterpriseDate;
 
         if (isEditing)
         {
@@ -601,6 +670,10 @@
                 existing.DeliveryMethod = currentProject.DeliveryMethod;
                 existing.Priority = currentProject.Priority;
                 existing.StatusId = currentProject.StatusId;
+                existing.ThemeId = currentProject.ThemeId;
+                existing.Health = currentProject.Health;
+                existing.TargetPilotGoLiveDate = currentProject.TargetPilotGoLiveDate;
+                existing.TargetEnterpriseGoLiveDate = currentProject.TargetEnterpriseGoLiveDate;
                 await DbContext.SaveChangesAsync();
             }
         }
@@ -628,6 +701,32 @@
         Priority.Low => "badge-success",
         _ => "badge-secondary"
     };
+
+    private string GetHealthDisplayName(Health health) => health switch
+    {
+        Health.OnTarget => "On Target",
+        Health.AtRiskOfDelay => "At Risk of Delay",
+        Health.Delayed => "Delayed",
+        Health.Completed => "Completed",
+        _ => health.ToString()
+    };
+
+    private string GetHealthClass(Health health) => health switch
+    {
+        Health.OnTarget => "badge-success",
+        Health.AtRiskOfDelay => "badge-warning",
+        Health.Delayed => "badge-danger",
+        Health.Completed => "badge-info",
+        _ => "badge-secondary"
+    };
+
+    private string FormatLeadName(string? fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return "-";
+        var parts = fullName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2) return parts[0];
+        return $"{parts[0]} {parts[^1][0]}.";
+    }
 
     private void ToggleStatusDropdown() => showStatusDropdown = !showStatusDropdown;
 
