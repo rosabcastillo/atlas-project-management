@@ -16,6 +16,10 @@
 </div>
 
 <div class="glass-card">
+    @if (showProjectDropdown)
+    {
+        <div class="multi-select-overlay" @onclick="CloseProjectDropdown"></div>
+    }
     <div class="action-bar">
         <div class="action-bar-left">
             <div class="view-toggle">
@@ -25,11 +29,14 @@
                 <button class="view-toggle-btn @(viewMode == "Project" ? "active" : "")" @onclick='() => SetViewMode("Project")'>
                     By Project
                 </button>
+                <button class="view-toggle-btn @(viewMode == "Timeline" ? "active" : "")" @onclick='() => SetViewMode("Timeline")'>
+                    Timeline
+                </button>
             </div>
 
             @if (viewMode == "Resource")
             {
-                <select class="form-control" style="width: 220px;" @bind="selectedResourceId" @bind:after="OnSelectionChanged">
+                <select class="btn btn-secondary btn-sm calendar-filter-select" @bind="selectedResourceId" @bind:after="OnSelectionChanged">
                     <option value="0">Select a resource...</option>
                     @foreach (var resource in resources)
                     {
@@ -37,9 +44,9 @@
                     }
                 </select>
             }
-            else
+            else if (viewMode == "Project")
             {
-                <select class="form-control" style="width: 220px;" @bind="selectedProjectId" @bind:after="OnSelectionChanged">
+                <select class="btn btn-secondary btn-sm calendar-filter-select" @bind="selectedProjectId" @bind:after="OnSelectionChanged">
                     <option value="0">Select a project...</option>
                     @foreach (var project in projects)
                     {
@@ -47,92 +54,340 @@
                     }
                 </select>
             }
-        </div>
-        <div class="action-bar-right">
-            <div class="month-nav">
-                <button class="month-nav-btn" @onclick="PreviousMonth" title="Previous month">&lt;</button>
-                <span class="month-nav-label">@currentMonth.ToString("MMMM yyyy")</span>
-                <button class="month-nav-btn" @onclick="NextMonth" title="Next month">&gt;</button>
-            </div>
-            <button class="btn btn-secondary btn-sm" @onclick="GoToToday">Today</button>
-        </div>
-    </div>
-
-    <div class="calendar-container">
-        <div class="calendar-header">
-            @foreach (var day in new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" })
+            else if (viewMode == "Timeline")
             {
-                <div class="calendar-day-header">@day</div>
-            }
-        </div>
+                <div class="period-toggle">
+                    <button class="period-toggle-btn @(timelinePeriod == "Month" ? "active" : "")" @onclick='() => SetTimelinePeriod("Month")'>Month</button>
+                    <button class="period-toggle-btn @(timelinePeriod == "Quarter" ? "active" : "")" @onclick='() => SetTimelinePeriod("Quarter")'>Quarter</button>
+                </div>
 
-        <div class="calendar-grid">
-            @foreach (var week in calendarWeeks)
-            {
-                <div class="calendar-week">
-                    @foreach (var day in week)
+                <div class="multi-select-dropdown">
+                    <button class="btn btn-secondary btn-sm multi-select-btn" @onclick="ToggleProjectDropdown" @onclick:stopPropagation="true">
+                        @if (selectedProjectIds.Count == 0)
+                        {
+                            <span>Select projects...</span>
+                        }
+                        else
+                        {
+                            <span>@selectedProjectIds.Count project@(selectedProjectIds.Count != 1 ? "s" : "")</span>
+                        }
+                        <span class="dropdown-arrow">@(showProjectDropdown ? "\u25B2" : "\u25BC")</span>
+                    </button>
+                    @if (showProjectDropdown)
                     {
-                        var dayUnavailabilities = GetUnavailabilitiesForDay(day);
-                        var hasFullDayUnavailability = dayUnavailabilities.Any(u => u.Hours >= 8);
-                        var dayAllocations = hasFullDayUnavailability ? new List<AllocationDisplay>() : GetAllocationsForDay(day);
-                        var isToday = day.Date == DateTime.Today;
-                        var isCurrentMonth = day.Month == currentMonth.Month;
-
-                        <div class="calendar-day @(!isCurrentMonth ? "other-month" : "") @(isToday ? "today" : "")">
-                            <div class="calendar-day-number">@day.Day</div>
-                            <div class="calendar-day-content">
-                                @foreach (var unav in dayUnavailabilities)
-                                {
-                                    var startsToday = unav.StartDate.Date == day.Date;
-                                    var endsToday = unav.EndDate.Date == day.Date;
-                                    var isPartialDay = unav.Hours < 8;
-
-                                    <div class="calendar-unavailability unavailability-@unav.Reason.ToString().ToLower() @(startsToday ? "starts-here" : "") @(endsToday ? "ends-here" : "") @(isPartialDay ? "partial-day" : "")"
-                                         title="@unav.TooltipText">
-                                        <span class="unavailability-icon">✕</span>
-                                        <span class="unavailability-label">@unav.Label</span>
-                                        @if (isPartialDay)
-                                        {
-                                            <span class="unavailability-hours-badge">@unav.Hours h</span>
-                                        }
-                                    </div>
-                                }
-                                @foreach (var alloc in dayAllocations)
-                                {
-                                    var startsToday = alloc.StartDate.Date == day.Date;
-                                    var endsToday = alloc.EndDate.Date == day.Date;
-
-                                    <div class="calendar-allocation @(startsToday ? "starts-here" : "") @(endsToday ? "ends-here" : "")"
-                                         style="background-color: @alloc.Color;"
-                                         title="@alloc.TooltipText">
-                                        <span class="allocation-label">@alloc.Label</span>
-                                        @if (alloc.Percentage.HasValue)
-                                        {
-                                            <span class="allocation-pct">@alloc.Percentage%</span>
-                                        }
-                                    </div>
-                                }
+                        <div class="multi-select-menu" @onclick:stopPropagation="true">
+                            <div class="multi-select-item" @onclick="SelectAllProjects">
+                                <input type="checkbox" checked="@(selectedProjectIds.Count == projects.Count)" readonly />
+                                <span style="font-weight: 600;">Select All</span>
                             </div>
+                            @foreach (var project in projects)
+                            {
+                                var pId = project.Id;
+                                <div class="multi-select-item" @onclick="() => ToggleProjectSelection(pId)">
+                                    <input type="checkbox" checked="@selectedProjectIds.Contains(pId)" readonly />
+                                    <span>@project.Name</span>
+                                </div>
+                            }
                         </div>
                     }
                 </div>
             }
         </div>
+        <div class="action-bar-right">
+            <div class="month-nav">
+                <button class="month-nav-btn" @onclick="PreviousMonth" title="@(viewMode == "Timeline" && timelinePeriod == "Quarter" ? "Previous quarter" : "Previous month")">&lt;</button>
+                <span class="month-nav-label">
+                    @if (viewMode == "Timeline" && timelinePeriod == "Quarter")
+                    {
+                        var qStart = GetQuarterStart(currentMonth);
+                        var qEnd = GetQuarterEnd(currentMonth);
+                        @($"{qStart:MMM} - {qEnd:MMM yyyy}")
+                    }
+                    else
+                    {
+                        @currentMonth.ToString("MMMM yyyy")
+                    }
+                </span>
+                <button class="month-nav-btn" @onclick="NextMonth" title="@(viewMode == "Timeline" && timelinePeriod == "Quarter" ? "Next quarter" : "Next month")">&gt;</button>
+            </div>
+            <button class="btn btn-secondary btn-sm" @onclick="GoToToday">Today</button>
+        </div>
     </div>
 
-    @if ((viewMode == "Resource" && selectedResourceId == 0) || (viewMode == "Project" && selectedProjectId == 0))
+    @if (viewMode == "Timeline")
     {
-        <div class="calendar-empty-state">
-            <div class="empty-state-icon">📅</div>
-            <p>Select a @(viewMode.ToLower()) to view allocations</p>
-        </div>
+        @if (selectedProjectIds.Count == 0)
+        {
+            <div class="calendar-empty-state">
+                <div class="empty-state-icon">📊</div>
+                <p>Select one or more projects to view the timeline</p>
+            </div>
+        }
+        else
+        {
+            var tStart = GetTimelineStart();
+            var tEnd = GetTimelineEnd();
+            var totalDays = (tEnd - tStart).Days + 1;
+            var months = GetTimelineMonths(tStart, tEnd);
+            var weeks = GetTimelineWeeks(tStart, tEnd);
+            var todayPct = GetTodayPosition(tStart, tEnd, totalDays);
+
+            <div class="timeline-legend-strip">
+                <span class="timeline-legend-item">
+                    <span class="timeline-legend-diamond pilot">&#x25C6;</span>
+                    <span>Pilot Go-Live</span>
+                </span>
+                <span class="timeline-legend-item">
+                    <span class="timeline-legend-diamond enterprise">&#x25C6;</span>
+                    <span>Enterprise Go-Live</span>
+                </span>
+                <span class="timeline-legend-item">
+                    <span class="timeline-legend-line"></span>
+                    <span>Today</span>
+                </span>
+                <span class="timeline-legend-item">
+                    <span class="timeline-legend-unavail"></span>
+                    <span>Unavailable</span>
+                </span>
+                <span class="timeline-legend-item">
+                    <span class="timeline-legend-unavail partial"></span>
+                    <span>Partial Day</span>
+                </span>
+            </div>
+
+            <div class="timeline-container">
+                @* Header *@
+                <div class="timeline-header">
+                    @* Month row *@
+                    <div class="timeline-header-row">
+                        <div class="timeline-label-header">Project</div>
+                        <div class="timeline-dates">
+                            @foreach (var m in months)
+                            {
+                                <div class="timeline-month-cell" style="flex: @m.Days;">
+                                    @m.Label
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    @* Week row *@
+                    <div class="timeline-header-row">
+                        <div class="timeline-label-header" style="font-size: 0.65rem; color: var(--text-muted);">Resource</div>
+                        <div class="timeline-dates">
+                            @foreach (var w in weeks)
+                            {
+                                <div class="timeline-week-cell" style="flex: @w.Days;">
+                                    @w.Label
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                @* Body *@
+                <div class="timeline-body">
+                    @foreach (var tp in timelineProjects)
+                    {
+                        var isExpanded = expandedTimelineProjects.Contains(tp.ProjectId);
+
+                        @* Project row *@
+                        <div class="timeline-row project-row">
+                            <div class="timeline-label">
+                                @if (tp.Resources.Any())
+                                {
+                                    <button class="timeline-expand-btn" @onclick="() => ToggleTimelineExpand(tp.ProjectId)" title="@(isExpanded ? "Collapse" : "Expand")">
+                                        @(isExpanded ? "\u25BC" : "\u25B6")
+                                    </button>
+                                }
+                                <span class="timeline-label-name" title="@BuildProjectLabelTooltip(tp)">@tp.ProjectName</span>
+                                @if (tp.Health.HasValue)
+                                {
+                                    <span class="badge badge-sm timeline-health @GetHealthClass(tp.Health.Value)">@GetHealthShort(tp.Health.Value)</span>
+                                }
+                            </div>
+                            <div class="timeline-bar-area">
+                                @* Grid lines *@
+                                @foreach (var w in weeks)
+                                {
+                                    var linePct = (double)(w.StartDate - tStart).Days / totalDays * 100;
+                                    <div class="timeline-grid-line" style="left: @($"{linePct:F2}")%;"></div>
+                                }
+
+                                @* Project bar *@
+                                @if (tp.BarLeftPct >= 0 && tp.BarWidthPct > 0)
+                                {
+                                    <div class="timeline-bar"
+                                         style="left: @($"{tp.BarLeftPct:F2}")%; width: @($"{tp.BarWidthPct:F2}")%; background-color: @tp.Color;"
+                                         title="@tp.ProjectName: @tp.EarliestStart.ToString("MMM dd") - @tp.LatestEnd.ToString("MMM dd, yyyy")">
+                                        @tp.ProjectName
+                                    </div>
+                                }
+
+                                @* Go-Live milestones *@
+                                @if (tp.PilotGoLivePct.HasValue)
+                                {
+                                    <div class="timeline-milestone pilot"
+                                         style="left: @($"{tp.PilotGoLivePct.Value:F2}")%;"
+                                         title="Pilot Go-Live: @tp.PilotGoLiveDate!.Value.ToString("MMM dd, yyyy")">
+                                        <span class="milestone-diamond">&#x25C6;</span>
+                                        <span class="milestone-label">P</span>
+                                    </div>
+                                }
+                                @if (tp.EnterpriseGoLivePct.HasValue)
+                                {
+                                    <div class="timeline-milestone enterprise"
+                                         style="left: @($"{tp.EnterpriseGoLivePct.Value:F2}")%;"
+                                         title="Enterprise Go-Live: @tp.EnterpriseGoLiveDate!.Value.ToString("MMM dd, yyyy")">
+                                        <span class="milestone-diamond">&#x25C6;</span>
+                                        <span class="milestone-label">E</span>
+                                    </div>
+                                }
+
+                                @* Today line *@
+                                @if (todayPct.HasValue)
+                                {
+                                    <div class="timeline-today-line" style="left: @($"{todayPct.Value:F2}")%;"></div>
+                                }
+                            </div>
+                        </div>
+
+                        @* Resource sub-rows *@
+                        @if (isExpanded)
+                        {
+                            @foreach (var tr in tp.Resources)
+                            {
+                                <div class="timeline-row resource-row">
+                                    <div class="timeline-label">
+                                        <span class="timeline-label-name" title="@tr.ResourceName">@tr.ResourceName</span>
+                                        @if (tr.Percentage.HasValue)
+                                        {
+                                            <span class="timeline-label-pct">@tr.Percentage%</span>
+                                        }
+                                    </div>
+                                    <div class="timeline-bar-area">
+                                        @* Grid lines *@
+                                        @foreach (var w in weeks)
+                                        {
+                                            var linePct = (double)(w.StartDate - tStart).Days / totalDays * 100;
+                                            <div class="timeline-grid-line" style="left: @($"{linePct:F2}")%;"></div>
+                                        }
+
+                                        @if (tr.BarLeftPct >= 0 && tr.BarWidthPct > 0)
+                                        {
+                                            <div class="timeline-resource-bar"
+                                                 style="left: @($"{tr.BarLeftPct:F2}")%; width: @($"{tr.BarWidthPct:F2}")%; background-color: @tr.Color;"
+                                                 title="@tr.ResourceName @(tr.Percentage.HasValue ? $"({tr.Percentage}%)" : ""): @tr.StartDate.ToString("MMM dd") - @tr.EndDate.ToString("MMM dd, yyyy")">
+                                                @tr.ResourceName @(tr.Percentage.HasValue ? $"({tr.Percentage}%)" : "")
+                                            </div>
+                                        }
+
+                                        @* Unavailability overlays *@
+                                        @foreach (var u in tr.Unavailabilities)
+                                        {
+                                            <div class="timeline-unavailability-bar @(u.Hours < 8 ? "partial" : "")"
+                                                 style="left: @($"{u.BarLeftPct:F2}")%; width: @($"{u.BarWidthPct:F2}")%;"
+                                                 title="@u.TooltipText">
+                                            </div>
+                                        }
+
+                                        @if (todayPct.HasValue)
+                                        {
+                                            <div class="timeline-today-line" style="left: @($"{todayPct.Value:F2}")%;"></div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }
+                    }
+
+                    @if (!timelineProjects.Any())
+                    {
+                        <div class="timeline-empty">
+                            No allocations found for the selected projects in this period.
+                        </div>
+                    }
+                </div>
+            </div>
+        }
     }
-    else if (!filteredAllocations.Any())
+    else
     {
-        <div class="calendar-empty-state">
-            <div class="empty-state-icon">📭</div>
-            <p>No allocations found for @currentMonth.ToString("MMMM yyyy")</p>
+        <div class="calendar-container">
+            <div class="calendar-header">
+                @foreach (var day in new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" })
+                {
+                    <div class="calendar-day-header">@day</div>
+                }
+            </div>
+
+            <div class="calendar-grid">
+                @foreach (var week in calendarWeeks)
+                {
+                    <div class="calendar-week">
+                        @foreach (var day in week)
+                        {
+                            var dayUnavailabilities = GetUnavailabilitiesForDay(day);
+                            var hasFullDayUnavailability = dayUnavailabilities.Any(u => u.Hours >= 8);
+                            var dayAllocations = hasFullDayUnavailability ? new List<AllocationDisplay>() : GetAllocationsForDay(day);
+                            var isToday = day.Date == DateTime.Today;
+                            var isCurrentMonth = day.Month == currentMonth.Month;
+
+                            <div class="calendar-day @(!isCurrentMonth ? "other-month" : "") @(isToday ? "today" : "")">
+                                <div class="calendar-day-number">@day.Day</div>
+                                <div class="calendar-day-content">
+                                    @foreach (var unav in dayUnavailabilities)
+                                    {
+                                        var startsToday = unav.StartDate.Date == day.Date;
+                                        var endsToday = unav.EndDate.Date == day.Date;
+                                        var isPartialDay = unav.Hours < 8;
+
+                                        <div class="calendar-unavailability unavailability-@unav.Reason.ToString().ToLower() @(startsToday ? "starts-here" : "") @(endsToday ? "ends-here" : "") @(isPartialDay ? "partial-day" : "")"
+                                             title="@unav.TooltipText">
+                                            <span class="unavailability-icon">&#x2715;</span>
+                                            <span class="unavailability-label">@unav.Label</span>
+                                            @if (isPartialDay)
+                                            {
+                                                <span class="unavailability-hours-badge">@unav.Hours h</span>
+                                            }
+                                        </div>
+                                    }
+                                    @foreach (var alloc in dayAllocations)
+                                    {
+                                        var startsToday = alloc.StartDate.Date == day.Date;
+                                        var endsToday = alloc.EndDate.Date == day.Date;
+
+                                        <div class="calendar-allocation @(startsToday ? "starts-here" : "") @(endsToday ? "ends-here" : "")"
+                                             style="background-color: @alloc.Color;"
+                                             title="@alloc.TooltipText">
+                                            <span class="allocation-label">@alloc.Label</span>
+                                            @if (alloc.Percentage.HasValue)
+                                            {
+                                                <span class="allocation-pct">@alloc.Percentage%</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
         </div>
+
+        @if ((viewMode == "Resource" && selectedResourceId == 0) || (viewMode == "Project" && selectedProjectId == 0))
+        {
+            <div class="calendar-empty-state">
+                <div class="empty-state-icon">&#x1F4C5;</div>
+                <p>Select a @(viewMode.ToLower()) to view allocations</p>
+            </div>
+        }
+        else if (!filteredAllocations.Any())
+        {
+            <div class="calendar-empty-state">
+                <div class="empty-state-icon">&#x1F4ED;</div>
+                <p>No allocations found for @currentMonth.ToString("MMMM yyyy")</p>
+            </div>
+        }
     }
 </div>
 
@@ -224,12 +479,27 @@
 
     private List<List<DateTime>> calendarWeeks = new();
 
-    // Pastel color palette for visual distinction
-    private static readonly string[] ColorPalette = new[]
+    // Timeline state
+    private string timelinePeriod = "Month";
+    private HashSet<int> selectedProjectIds = new();
+    private HashSet<int> expandedTimelineProjects = new();
+    private bool showProjectDropdown = false;
+    private List<TimelineProject> timelineProjects = new();
+
+    // Project colors — warm tones (purples, pinks, oranges, yellows)
+    private static readonly string[] ProjectPalette = new[]
     {
-        "#a78bfa", "#93c5fd", "#86efac", "#fcd34d", "#fca5a5",
-        "#c4b5fd", "#67e8f9", "#f9a8d4", "#5eead4", "#fdba74",
-        "#a5b4fc", "#bef264", "#7dd3fc", "#d8b4fe", "#6ee7b7"
+        "#a78bfa", "#f9a8d4", "#fcd34d", "#fca5a5", "#c4b5fd",
+        "#fdba74", "#d8b4fe", "#fbbf24", "#f0abfc", "#fb923c",
+        "#e9d5ff", "#fda4af", "#fde68a", "#c084fc", "#fed7aa"
+    };
+
+    // Resource colors — cool tones (blues, greens, teals, cyans)
+    private static readonly string[] ResourcePalette = new[]
+    {
+        "#93c5fd", "#86efac", "#67e8f9", "#5eead4", "#a5b4fc",
+        "#bef264", "#7dd3fc", "#6ee7b7", "#a7f3d0", "#38bdf8",
+        "#99f6e4", "#7dd3fc", "#4ade80", "#22d3ee", "#34d399"
     };
 
     protected override async Task OnInitializedAsync()
@@ -240,6 +510,8 @@
             .ToListAsync();
 
         projects = await DbContext.Projects
+            .Include(p => p.Theme)
+            .Include(p => p.Status)
             .OrderBy(p => p.Name)
             .ToListAsync();
 
@@ -406,42 +678,21 @@
         _ => reason.ToString()
     };
 
-    private string GetUnavailabilityStyle(UnavailabilityReason reason, bool isPartialDay)
-    {
-        var baseColor = reason switch
-        {
-            UnavailabilityReason.PTO => "#fecaca",
-            UnavailabilityReason.Holiday => "#d9f99d",
-            UnavailabilityReason.SickLeave => "#fed7aa",
-            UnavailabilityReason.Other => "#e5e7eb",
-            _ => "#e5e7eb"
-        };
-
-        var borderColor = reason switch
-        {
-            UnavailabilityReason.PTO => "#f87171",
-            UnavailabilityReason.Holiday => "#a3e635",
-            UnavailabilityReason.SickLeave => "#fb923c",
-            UnavailabilityReason.Other => "#9ca3af",
-            _ => "#9ca3af"
-        };
-
-        if (isPartialDay)
-        {
-            return $"background: repeating-linear-gradient(45deg, {baseColor}, {baseColor} 4px, white 4px, white 8px); border-color: {borderColor};";
-        }
-
-        return $"background-color: {baseColor}; border-color: {borderColor};";
-    }
-
-    private string GetProjectColor(int projectId) => ColorPalette[projectId % ColorPalette.Length];
-    private string GetResourceColor(int resourceId) => ColorPalette[resourceId % ColorPalette.Length];
+    private string GetProjectColor(int projectId) => ProjectPalette[projectId % ProjectPalette.Length];
+    private string GetResourceColor(int resourceId) => ResourcePalette[resourceId % ResourcePalette.Length];
 
     private void SetViewMode(string mode)
     {
         viewMode = mode;
-        FilterAllocations();
-        FilterUnavailabilities();
+        if (mode == "Timeline")
+        {
+            BuildTimelineData();
+        }
+        else
+        {
+            FilterAllocations();
+            FilterUnavailabilities();
+        }
     }
 
     private void OnSelectionChanged()
@@ -452,27 +703,326 @@
 
     private void PreviousMonth()
     {
-        currentMonth = currentMonth.AddMonths(-1);
+        if (viewMode == "Timeline" && timelinePeriod == "Quarter")
+        {
+            currentMonth = currentMonth.AddMonths(-3);
+        }
+        else
+        {
+            currentMonth = currentMonth.AddMonths(-1);
+        }
         BuildCalendarGrid();
-        FilterAllocations();
-        FilterUnavailabilities();
+        if (viewMode == "Timeline")
+            BuildTimelineData();
+        else
+        {
+            FilterAllocations();
+            FilterUnavailabilities();
+        }
     }
 
     private void NextMonth()
     {
-        currentMonth = currentMonth.AddMonths(1);
+        if (viewMode == "Timeline" && timelinePeriod == "Quarter")
+        {
+            currentMonth = currentMonth.AddMonths(3);
+        }
+        else
+        {
+            currentMonth = currentMonth.AddMonths(1);
+        }
         BuildCalendarGrid();
-        FilterAllocations();
-        FilterUnavailabilities();
+        if (viewMode == "Timeline")
+            BuildTimelineData();
+        else
+        {
+            FilterAllocations();
+            FilterUnavailabilities();
+        }
     }
 
     private void GoToToday()
     {
         currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         BuildCalendarGrid();
-        FilterAllocations();
-        FilterUnavailabilities();
+        if (viewMode == "Timeline")
+            BuildTimelineData();
+        else
+        {
+            FilterAllocations();
+            FilterUnavailabilities();
+        }
     }
+
+    // ===== Timeline Methods =====
+
+    private void SetTimelinePeriod(string period)
+    {
+        timelinePeriod = period;
+        BuildTimelineData();
+    }
+
+    private void ToggleProjectDropdown()
+    {
+        showProjectDropdown = !showProjectDropdown;
+    }
+
+    private void CloseProjectDropdown()
+    {
+        showProjectDropdown = false;
+        BuildTimelineData();
+    }
+
+    private void ToggleProjectSelection(int projectId)
+    {
+        if (!selectedProjectIds.Remove(projectId))
+            selectedProjectIds.Add(projectId);
+        BuildTimelineData();
+    }
+
+    private void SelectAllProjects()
+    {
+        if (selectedProjectIds.Count == projects.Count)
+            selectedProjectIds.Clear();
+        else
+            selectedProjectIds = projects.Select(p => p.Id).ToHashSet();
+        BuildTimelineData();
+    }
+
+    private void ToggleTimelineExpand(int projectId)
+    {
+        if (!expandedTimelineProjects.Remove(projectId))
+            expandedTimelineProjects.Add(projectId);
+    }
+
+    private DateTime GetTimelineStart()
+    {
+        if (timelinePeriod == "Quarter")
+            return GetQuarterStart(currentMonth);
+        return new DateTime(currentMonth.Year, currentMonth.Month, 1);
+    }
+
+    private DateTime GetTimelineEnd()
+    {
+        if (timelinePeriod == "Quarter")
+            return GetQuarterEnd(currentMonth);
+        return new DateTime(currentMonth.Year, currentMonth.Month, 1).AddMonths(1).AddDays(-1);
+    }
+
+    private DateTime GetQuarterStart(DateTime date)
+    {
+        var quarterMonth = ((date.Month - 1) / 3) * 3 + 1;
+        return new DateTime(date.Year, quarterMonth, 1);
+    }
+
+    private DateTime GetQuarterEnd(DateTime date)
+    {
+        var quarterStart = GetQuarterStart(date);
+        return quarterStart.AddMonths(3).AddDays(-1);
+    }
+
+    private void BuildTimelineData()
+    {
+        timelineProjects.Clear();
+        if (selectedProjectIds.Count == 0) return;
+
+        var tStart = GetTimelineStart();
+        var tEnd = GetTimelineEnd();
+        var totalDays = (tEnd - tStart).Days + 1;
+
+        foreach (var projectId in selectedProjectIds.OrderBy(id => projects.FirstOrDefault(p => p.Id == id)?.Name))
+        {
+            var project = projects.FirstOrDefault(p => p.Id == projectId);
+            if (project == null) continue;
+
+            var projectAllocations = allocations
+                .Where(a => a.ProjectId == projectId && a.StartDate <= tEnd && a.EndDate >= tStart)
+                .OrderBy(a => a.Resource.Name)
+                .ToList();
+
+            var tp = new TimelineProject
+            {
+                ProjectId = projectId,
+                ProjectName = project.Name,
+                Health = project.Health,
+                Color = GetProjectColor(projectId),
+                PilotGoLiveDate = project.TargetPilotGoLiveDate,
+                EnterpriseGoLiveDate = project.TargetEnterpriseGoLiveDate
+            };
+
+            if (projectAllocations.Any())
+            {
+                tp.EarliestStart = projectAllocations.Min(a => a.StartDate);
+                tp.LatestEnd = projectAllocations.Max(a => a.EndDate);
+
+                var barStart = tp.EarliestStart < tStart ? tStart : tp.EarliestStart;
+                var barEnd = tp.LatestEnd > tEnd ? tEnd : tp.LatestEnd;
+
+                tp.BarLeftPct = (double)(barStart - tStart).Days / totalDays * 100;
+                tp.BarWidthPct = (double)((barEnd - barStart).Days + 1) / totalDays * 100;
+            }
+
+            // Go-Live milestone positions
+            if (project.TargetPilotGoLiveDate.HasValue)
+            {
+                var pilotDate = project.TargetPilotGoLiveDate.Value;
+                if (pilotDate >= tStart && pilotDate <= tEnd)
+                {
+                    tp.PilotGoLivePct = (double)(pilotDate - tStart).Days / totalDays * 100;
+                }
+            }
+            if (project.TargetEnterpriseGoLiveDate.HasValue)
+            {
+                var entDate = project.TargetEnterpriseGoLiveDate.Value;
+                if (entDate >= tStart && entDate <= tEnd)
+                {
+                    tp.EnterpriseGoLivePct = (double)(entDate - tStart).Days / totalDays * 100;
+                }
+            }
+
+            // Resource sub-rows
+            foreach (var alloc in projectAllocations)
+            {
+                var rBarStart = alloc.StartDate < tStart ? tStart : alloc.StartDate;
+                var rBarEnd = alloc.EndDate > tEnd ? tEnd : alloc.EndDate;
+
+                var tr = new TimelineResource
+                {
+                    ResourceName = alloc.Resource.Name,
+                    Percentage = alloc.Percentage,
+                    Color = GetResourceColor(alloc.ResourceId),
+                    StartDate = alloc.StartDate,
+                    EndDate = alloc.EndDate,
+                    BarLeftPct = (double)(rBarStart - tStart).Days / totalDays * 100,
+                    BarWidthPct = (double)((rBarEnd - rBarStart).Days + 1) / totalDays * 100
+                };
+
+                // Add unavailabilities for this resource
+                var resourceUnavs = unavailabilities
+                    .Where(u => u.ResourceId == alloc.ResourceId && u.StartDate <= tEnd && u.EndDate >= tStart)
+                    .ToList();
+
+                foreach (var u in resourceUnavs)
+                {
+                    var uStart = u.StartDate < tStart ? tStart : u.StartDate;
+                    var uEnd = u.EndDate > tEnd ? tEnd : u.EndDate;
+
+                    tr.Unavailabilities.Add(new TimelineUnavailability
+                    {
+                        Reason = GetReasonDisplayName(u.Reason),
+                        Hours = u.Hours,
+                        StartDate = u.StartDate,
+                        EndDate = u.EndDate,
+                        BarLeftPct = (double)(uStart - tStart).Days / totalDays * 100,
+                        BarWidthPct = (double)((uEnd - uStart).Days + 1) / totalDays * 100,
+                        TooltipText = $"{GetReasonDisplayName(u.Reason)}{(u.Hours < 8 ? $" ({u.Hours}h/day)" : "")}: {u.StartDate:MMM dd} - {u.EndDate:MMM dd, yyyy}"
+                    });
+                }
+
+                tp.Resources.Add(tr);
+            }
+
+            timelineProjects.Add(tp);
+        }
+    }
+
+    private List<TimelineMonth> GetTimelineMonths(DateTime tStart, DateTime tEnd)
+    {
+        var months = new List<TimelineMonth>();
+        var current = new DateTime(tStart.Year, tStart.Month, 1);
+
+        while (current <= tEnd)
+        {
+            var monthStart = current < tStart ? tStart : current;
+            var monthEnd = current.AddMonths(1).AddDays(-1);
+            if (monthEnd > tEnd) monthEnd = tEnd;
+
+            months.Add(new TimelineMonth
+            {
+                Label = current.ToString("MMM yyyy"),
+                Days = (monthEnd - monthStart).Days + 1,
+                StartDate = monthStart
+            });
+
+            current = current.AddMonths(1);
+        }
+
+        return months;
+    }
+
+    private List<TimelineWeek> GetTimelineWeeks(DateTime tStart, DateTime tEnd)
+    {
+        var weeks = new List<TimelineWeek>();
+        // Start from the Monday on or before tStart
+        var current = tStart;
+
+        while (current <= tEnd)
+        {
+            var weekEnd = current.AddDays(6);
+            if (weekEnd > tEnd) weekEnd = tEnd;
+
+            weeks.Add(new TimelineWeek
+            {
+                Label = current.ToString("MMM dd"),
+                Days = (weekEnd - current).Days + 1,
+                StartDate = current
+            });
+
+            current = weekEnd.AddDays(1);
+        }
+
+        return weeks;
+    }
+
+    private double? GetTodayPosition(DateTime tStart, DateTime tEnd, int totalDays)
+    {
+        var today = DateTime.Today;
+        if (today >= tStart && today <= tEnd)
+            return (double)(today - tStart).Days / totalDays * 100;
+        return null;
+    }
+
+    private string BuildProjectLabelTooltip(TimelineProject tp)
+    {
+        var text = tp.ProjectName;
+        if (tp.PilotGoLiveDate.HasValue)
+            text += $"\nPilot Go-Live: {tp.PilotGoLiveDate.Value:MMM dd, yyyy}";
+        if (tp.EnterpriseGoLiveDate.HasValue)
+            text += $"\nEnterprise Go-Live: {tp.EnterpriseGoLiveDate.Value:MMM dd, yyyy}";
+        if (tp.Health.HasValue)
+            text += $"\nHealth: {GetHealthDisplayName(tp.Health.Value)}";
+        return text;
+    }
+
+    // Health helpers
+    private string GetHealthDisplayName(Health health) => health switch
+    {
+        Health.OnTarget => "On Target",
+        Health.AtRiskOfDelay => "At Risk",
+        Health.Delayed => "Delayed",
+        Health.Completed => "Completed",
+        _ => health.ToString()
+    };
+
+    private string GetHealthShort(Health health) => health switch
+    {
+        Health.OnTarget => "OK",
+        Health.AtRiskOfDelay => "Risk",
+        Health.Delayed => "Late",
+        Health.Completed => "Done",
+        _ => health.ToString()
+    };
+
+    private string GetHealthClass(Health health) => health switch
+    {
+        Health.OnTarget => "badge-success",
+        Health.AtRiskOfDelay => "badge-warning",
+        Health.Delayed => "badge-danger",
+        Health.Completed => "badge-info",
+        _ => "badge-secondary"
+    };
+
+    // ===== Display Classes =====
 
     private class AllocationDisplay
     {
@@ -494,5 +1044,59 @@
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
         public string TooltipText { get; set; } = "";
+    }
+
+    private class TimelineProject
+    {
+        public int ProjectId { get; set; }
+        public string ProjectName { get; set; } = "";
+        public Health? Health { get; set; }
+        public string Color { get; set; } = "";
+        public DateTime EarliestStart { get; set; }
+        public DateTime LatestEnd { get; set; }
+        public double BarLeftPct { get; set; } = -1;
+        public double BarWidthPct { get; set; }
+        public DateTime? PilotGoLiveDate { get; set; }
+        public DateTime? EnterpriseGoLiveDate { get; set; }
+        public double? PilotGoLivePct { get; set; }
+        public double? EnterpriseGoLivePct { get; set; }
+        public List<TimelineResource> Resources { get; set; } = new();
+    }
+
+    private class TimelineResource
+    {
+        public string ResourceName { get; set; } = "";
+        public int? Percentage { get; set; }
+        public string Color { get; set; } = "";
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        public double BarLeftPct { get; set; }
+        public double BarWidthPct { get; set; }
+        public List<TimelineUnavailability> Unavailabilities { get; set; } = new();
+    }
+
+    private class TimelineUnavailability
+    {
+        public string Reason { get; set; } = "";
+        public int Hours { get; set; }
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        public double BarLeftPct { get; set; }
+        public double BarWidthPct { get; set; }
+        public string TooltipText { get; set; } = "";
+    }
+
+    private class TimelineMonth
+    {
+        public string Label { get; set; } = "";
+        public int Days { get; set; }
+        public DateTime StartDate { get; set; }
+    }
+
+    private class TimelineWeek
+    {
+        public string Label { get; set; } = "";
+        public int Days { get; set; }
+        public DateTime StartDate { get; set; }
     }
 }
