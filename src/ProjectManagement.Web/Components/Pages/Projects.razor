@@ -17,19 +17,23 @@
 </div>
 
 <div class="glass-card">
+    @if (showStatusDropdown || showLeadDropdown)
+    {
+        <div class="multi-select-overlay" @onclick="CloseAllDropdowns"></div>
+    }
     <div class="action-bar">
         <div class="action-bar-left">
             <div class="search-box">
                 <input type="text" class="form-control" placeholder="Search projects..." @bind="searchTerm" @bind:event="oninput" />
             </div>
             <div class="multi-select-dropdown">
-                <button type="button" class="form-control multi-select-btn" @onclick="ToggleStatusDropdown">
+                <button type="button" class="form-control multi-select-btn" @onclick="ToggleStatusDropdown" @onclick:stopPropagation="true">
                     @GetStatusFilterLabel()
                     <span class="dropdown-arrow">▼</span>
                 </button>
                 @if (showStatusDropdown)
                 {
-                    <div class="multi-select-menu">
+                    <div class="multi-select-menu" @onclick:stopPropagation="true">
                         <label class="multi-select-item">
                             <input type="checkbox" checked="@(filterStatusIds.Count == 0)" @onclick="SelectAllStatuses" />
                             <span>All Statuses</span>
@@ -49,13 +53,13 @@
                 }
             </div>
             <div class="multi-select-dropdown">
-                <button type="button" class="form-control multi-select-btn" @onclick="ToggleLeadDropdown">
+                <button type="button" class="form-control multi-select-btn" @onclick="ToggleLeadDropdown" @onclick:stopPropagation="true">
                     @GetLeadFilterLabel()
                     <span class="dropdown-arrow">▼</span>
                 </button>
                 @if (showLeadDropdown)
                 {
-                    <div class="multi-select-menu">
+                    <div class="multi-select-menu" @onclick:stopPropagation="true">
                         <label class="multi-select-item">
                             <input type="checkbox" checked="@(filterLeads.Count == 0)" @onclick="SelectAllLeads" />
                             <span>All Leads</span>
@@ -78,17 +82,20 @@
         <div class="action-bar-right">
             @if (groupBy == "Project")
             {
-                <button class="btn btn-secondary btn-sm" @onclick="ExpandAll">Expand All</button>
-                <button class="btn btn-secondary btn-sm" @onclick="CollapseAll">Collapse All</button>
+                <button class="btn btn-secondary btn-sm" style="white-space: nowrap;" @onclick="ToggleExpandAll" aria-label="@(allExpanded ? "Collapse All" : "Expand All")">
+                    @(allExpanded ? "▲ Collapse All" : "▼ Expand All")
+                </button>
             }
-            <span class="group-label">View:</span>
-            <select class="form-control w-auto" @bind="groupBy">
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+                <span class="group-label" style="margin-right: 0;">View:</span>
+                <select class="form-control w-auto" @bind="groupBy">
                 <option value="Project">Projects with Resources</option>
                 <option value="None">Projects Only</option>
                 <option value="Lead">Group by Lead</option>
                 <option value="Status">Group by Status</option>
                 <option value="Theme">Group by Theme</option>
             </select>
+            </div>
         </div>
     </div>
 
@@ -730,9 +737,19 @@
         return $"{parts[0]} {parts[^1][0]}.";
     }
 
-    private void ToggleStatusDropdown() => showStatusDropdown = !showStatusDropdown;
+    private void ToggleStatusDropdown()
+    {
+        showStatusDropdown = !showStatusDropdown;
+        if (showStatusDropdown) showLeadDropdown = false;
+    }
 
     private void CloseStatusDropdown() => showStatusDropdown = false;
+
+    private void CloseAllDropdowns()
+    {
+        showStatusDropdown = false;
+        showLeadDropdown = false;
+    }
 
     private void ToggleStatusFilter(int statusId)
     {
@@ -756,7 +773,11 @@
         return $"{filterStatusIds.Count} selected";
     }
 
-    private void ToggleLeadDropdown() => showLeadDropdown = !showLeadDropdown;
+    private void ToggleLeadDropdown()
+    {
+        showLeadDropdown = !showLeadDropdown;
+        if (showLeadDropdown) showStatusDropdown = false;
+    }
 
     private void CloseLeadDropdown() => showLeadDropdown = false;
 
@@ -790,17 +811,22 @@
             expandedProjects.Add(projectId);
     }
 
-    private void ExpandAll()
-    {
-        foreach (var project in SortedProjects.Where(p => p.Allocations.Any()))
-        {
-            expandedProjects.Add(project.Id);
-        }
-    }
+    private bool allExpanded = false;
 
-    private void CollapseAll()
+    private void ToggleExpandAll()
     {
-        expandedProjects.Clear();
+        if (allExpanded)
+        {
+            expandedProjects.Clear();
+        }
+        else
+        {
+            foreach (var project in SortedProjects.Where(p => p.Allocations.Any()))
+            {
+                expandedProjects.Add(project.Id);
+            }
+        }
+        allExpanded = !allExpanded;
     }
 
     // Drag and Drop handlers

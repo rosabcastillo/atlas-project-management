@@ -41,8 +41,9 @@
             </select>
         </div>
         <div class="action-bar-right">
-            <button class="btn btn-secondary btn-sm" @onclick="ExpandAll">Expand All</button>
-            <button class="btn btn-secondary btn-sm" @onclick="CollapseAll">Collapse All</button>
+            <button class="btn btn-secondary btn-sm" style="white-space: nowrap;" @onclick="ToggleExpandAll" aria-label="@(allExpanded ? "Collapse All" : "Expand All")">
+                @(allExpanded ? "▲ Collapse All" : "▼ Expand All")
+            </button>
         </div>
     </div>
 
@@ -448,17 +449,22 @@
             expandedResources.Add(resourceId);
     }
 
-    private void ExpandAll()
-    {
-        foreach (var resource in SortedResources.Where(r => GetResourceAllocations(r.Id).Any()))
-        {
-            expandedResources.Add(resource.Id);
-        }
-    }
+    private bool allExpanded = false;
 
-    private void CollapseAll()
+    private void ToggleExpandAll()
     {
-        expandedResources.Clear();
+        if (allExpanded)
+        {
+            expandedResources.Clear();
+        }
+        else
+        {
+            foreach (var resource in SortedResources.Where(r => GetResourceAllocations(r.Id).Any()))
+            {
+                expandedResources.Add(resource.Id);
+            }
+        }
+        allExpanded = !allExpanded;
     }
 
     private void OpenAddModal()
