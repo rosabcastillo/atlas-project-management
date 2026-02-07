@@ -110,7 +110,12 @@
                 </span>
                 <button class="month-nav-btn" @onclick="NextMonth" title="@(viewMode == "Timeline" && timelinePeriod == "Quarter" ? "Next quarter" : "Next month")">&gt;</button>
             </div>
-            <button class="btn btn-secondary btn-sm" @onclick="GoToToday">Today</button>
+            @if (viewMode == "Timeline" && timelineProjects.Any(t => t.Resources.Any()))
+            {
+                <button class="btn btn-secondary btn-sm" style="white-space: nowrap;" @onclick="ToggleExpandAllTimeline" aria-label="@(allTimelineExpanded ? "Collapse All" : "Expand All")">
+                    @(allTimelineExpanded ? "▲ Collapse All" : "▼ Expand All")
+                </button>
+            }
         </div>
     </div>
 
@@ -483,6 +488,7 @@
     private string timelinePeriod = "Month";
     private HashSet<int> selectedProjectIds = new();
     private HashSet<int> expandedTimelineProjects = new();
+    private bool allTimelineExpanded = false;
     private bool showProjectDropdown = false;
     private List<TimelineProject> timelineProjects = new();
 
@@ -733,19 +739,6 @@
         }
     }
 
-    private void GoToToday()
-    {
-        currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-        BuildCalendarGrid();
-        if (viewMode == "Timeline")
-            BuildTimelineData();
-        else
-        {
-            FilterAllocations();
-            FilterUnavailabilities();
-        }
-    }
-
     // ===== Timeline Methods =====
 
     private void SetTimelinePeriod(string period)
@@ -785,6 +778,22 @@
     {
         if (!expandedTimelineProjects.Remove(projectId))
             expandedTimelineProjects.Add(projectId);
+    }
+
+    private void ToggleExpandAllTimeline()
+    {
+        if (allTimelineExpanded)
+        {
+            expandedTimelineProjects.Clear();
+        }
+        else
+        {
+            foreach (var tp in timelineProjects.Where(t => t.Resources.Any()))
+            {
+                expandedTimelineProjects.Add(tp.ProjectId);
+            }
+        }
+        allTimelineExpanded = !allTimelineExpanded;
     }
 
     private DateTime GetTimelineStart()

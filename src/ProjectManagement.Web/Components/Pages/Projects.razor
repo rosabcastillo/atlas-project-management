@@ -78,6 +78,15 @@
                     </div>
                 }
             </div>
+            <div style="display: flex; align-items: center;">
+                <select class="form-control w-auto" @bind="groupBy">
+                    <option value="Project">Projects with Resources</option>
+                    <option value="None">Projects Only</option>
+                    <option value="Lead">Group by Lead</option>
+                    <option value="Status">Group by Status</option>
+                    <option value="Theme">Group by Theme</option>
+                </select>
+            </div>
         </div>
         <div class="action-bar-right">
             @if (groupBy == "Project")
@@ -86,16 +95,6 @@
                     @(allExpanded ? "▲ Collapse All" : "▼ Expand All")
                 </button>
             }
-            <div style="display: flex; align-items: center; gap: 0.35rem;">
-                <span class="group-label" style="margin-right: 0;">View:</span>
-                <select class="form-control w-auto" @bind="groupBy">
-                <option value="Project">Projects with Resources</option>
-                <option value="None">Projects Only</option>
-                <option value="Lead">Group by Lead</option>
-                <option value="Status">Group by Status</option>
-                <option value="Theme">Group by Theme</option>
-            </select>
-            </div>
         </div>
     </div>
 

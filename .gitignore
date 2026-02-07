@@ -105,5 +105,8 @@ $RECYCLE.BIN/
 *.swp
 *.swo
 
+# Presentation
+nova-presentation.html
+
 # Publish output
 publish/
