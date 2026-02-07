@@ -1,0 +1,43 @@
+@if (TotalPages > 1)
+{
+    <div class="pagination">
+        <button class="pagination-btn" disabled="@(CurrentPage == 1)" @onclick="() => GoToPage(1)">First</button>
+        <button class="pagination-btn" disabled="@(CurrentPage == 1)" @onclick="() => GoToPage(CurrentPage - 1)">Prev</button>
+        @foreach (var pageNum in GetPageNumbers())
+        {
+            <button class="pagination-btn @(pageNum == CurrentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">@pageNum</button>
+        }
+        <button class="pagination-btn" disabled="@(CurrentPage == TotalPages)" @onclick="() => GoToPage(CurrentPage + 1)">Next</button>
+        <button class="pagination-btn" disabled="@(CurrentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)">Last</button>
+        <span class="pagination-info">Showing @(((CurrentPage - 1) * PageSize) + 1)-@(Math.Min(CurrentPage * PageSize, TotalCount)) of @TotalCount</span>
+    </div>
+}
+
+@code {
+    [Parameter] public int CurrentPage { get; set; } = 1;
+    [Parameter] public int PageSize { get; set; } = 10;
+    [Parameter] public int TotalCount { get; set; }
+    [Parameter] public EventCallback<int> OnPageChanged { get; set; }
+
+    private int TotalPages => TotalCount > 0 ? (int)Math.Ceiling(TotalCount / (double)PageSize) : 1;
+
+    private async Task GoToPage(int page)
+    {
+        var clamped = Math.Max(1, Math.Min(page, TotalPages));
+        await OnPageChanged.InvokeAsync(clamped);
+    }
+
+    private IEnumerable<int> GetPageNumbers()
+    {
+        var start = Math.Max(1, CurrentPage - 2);
+        var end = Math.Min(TotalPages, CurrentPage + 2);
+        if (end - start < 4)
+        {
+            if (start == 1)
+                end = Math.Min(TotalPages, start + 4);
+            else
+                start = Math.Max(1, end - 4);
+        }
+        return Enumerable.Range(start, end - start + 1);
+    }
+}

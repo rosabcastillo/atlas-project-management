@@ -1,8 +1,12 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace ProjectManagement.Domain.Entities;
 
 public class Resource
 {
     public int Id { get; set; }
+
+    [Required, MaxLength(200)]
     public string Name { get; set; } = string.Empty;
 
     public int RoleId { get; set; }

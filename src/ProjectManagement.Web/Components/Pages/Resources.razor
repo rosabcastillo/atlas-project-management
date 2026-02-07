@@ -25,14 +25,14 @@
             <div class="search-box">
                 <input type="text" class="form-control" placeholder="Search resources..." @bind="searchTerm" @bind:event="oninput" @bind:after="ResetPage" />
             </div>
-            <select class="form-control" style="width: auto;" @bind="filterRoleId" @bind:after="ResetPage">
+            <select class="form-control w-auto" @bind="filterRoleId" @bind:after="ResetPage">
                 <option value="0">All Roles</option>
                 @foreach (var role in roles)
                 {
                     <option value="@role.Id">@role.Name</option>
                 }
             </select>
-            <select class="form-control" style="width: auto;" @bind="filterVendorId" @bind:after="ResetPage">
+            <select class="form-control w-auto" @bind="filterVendorId" @bind:after="ResetPage">
                 <option value="0">All Vendors</option>
                 <option value="-1">No Vendor</option>
                 @foreach (var vendor in vendors)
@@ -47,11 +47,11 @@
         <table>
             <thead>
                 <tr>
-                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")'>Name</th>
-                    <th class="sortable @(GetSortClass("Role"))" @onclick='() => SetSort("Role")'>Role</th>
-                    <th class="sortable @(GetSortClass("Vendor"))" @onclick='() => SetSort("Vendor")'>Vendor</th>
+                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Name"))">Name</th>
+                    <th class="sortable @(GetSortClass("Role"))" @onclick='() => SetSort("Role")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Role"))">Role</th>
+                    <th class="sortable @(GetSortClass("Vendor"))" @onclick='() => SetSort("Vendor")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Vendor"))">Vendor</th>
                     <th>Skills</th>
-                    <th class="sortable @(GetSortClass("EndDate"))" @onclick='() => SetSort("EndDate")'>End Date</th>
+                    <th class="sortable @(GetSortClass("EndDate"))" @onclick='() => SetSort("EndDate")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "EndDate"))">End Date</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -98,7 +98,7 @@
                         <td>
                             <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(resource)">Edit</button>
                             <button class="btn btn-secondary btn-sm" @onclick="() => OpenUnavailabilityModal(resource)">Unavailability</button>
-                            <button class="btn btn-danger btn-sm" @onclick="() => DeleteResource(resource)">Delete</button>
+                            <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDeleteResource(resource)">Delete</button>
                         </td>
                     </tr>
                 }
@@ -106,28 +106,15 @@
         </table>
     </div>
 
-    @if (TotalPages > 1)
-    {
-        <div class="pagination">
-            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(1)">First</button>
-            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)">Prev</button>
-            @foreach (var pageNum in GetPageNumbers())
-            {
-                <button class="pagination-btn @(pageNum == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">@pageNum</button>
-            }
-            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(currentPage + 1)">Next</button>
-            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)">Last</button>
-            <span class="pagination-info">Showing @(((currentPage - 1) * pageSize) + 1)-@(Math.Min(currentPage * pageSize, TotalCount)) of @TotalCount</span>
-        </div>
-    }
+    <PaginationBar CurrentPage="currentPage" PageSize="pageSize" TotalCount="TotalCount" OnPageChanged="GoToPage" />
 </div>
 
 @if (showModal)
 {
     <div class="modal-backdrop" @onclick="CloseModal">
-        <div class="modal" @onclick:stopPropagation="true">
+        <div class="modal" @onclick:stopPropagation="true" role="dialog" aria-labelledby="modal-title-resource">
             <div class="modal-header">
-                <h3 class="modal-title">@(isEditing ? "Edit Resource" : "Add Resource")</h3>
+                <h3 class="modal-title" id="modal-title-resource">@(isEditing ? "Edit Resource" : "Add Resource")</h3>
                 <button class="modal-close" @onclick="CloseModal">&times;</button>
             </div>
             <div class="modal-body">
@@ -136,7 +123,7 @@
                     <input type="text" class="form-control" @bind="currentResource.Name" />
                     @if (!string.IsNullOrEmpty(resourceError))
                     {
-                        <div class="text-danger" style="margin-top: 0.25rem; font-size: 0.875rem;">@resourceError</div>
+                        <div class="text-danger field-validation-error">@resourceError</div>
                     }
                 </div>
                 <div class="form-group">
@@ -165,7 +152,7 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Skills</label>
-                    <div class="skill-tags" style="gap: 0.5rem;">
+                    <div class="skill-tags">
                         @foreach (var skill in skills)
                         {
                             <span class="skill-tag @(selectedSkillIds.Contains(skill.Id) ? "selected" : "")"
@@ -187,9 +174,9 @@
 @if (showUnavailabilityModal && unavailabilityResource != null)
 {
     <div class="modal-backdrop" @onclick="CloseUnavailabilityModal">
-        <div class="modal modal-lg" @onclick:stopPropagation="true">
+        <div class="modal modal-lg" @onclick:stopPropagation="true" role="dialog" aria-labelledby="modal-title-unavailability">
             <div class="modal-header">
-                <h3 class="modal-title">Manage Unavailability - @unavailabilityResource.Name</h3>
+                <h3 class="modal-title" id="modal-title-unavailability">Manage Unavailability - @unavailabilityResource.Name</h3>
                 <button class="modal-close" @onclick="CloseUnavailabilityModal">&times;</button>
             </div>
             <div class="modal-body">
@@ -200,17 +187,17 @@
                         <div class="alert alert-error">@unavailabilityError</div>
                     }
                     <div class="form-row">
-                        <div class="form-group" style="flex: 1;">
+                        <div class="form-group flex-1">
                             <label class="form-label">From Date *</label>
                             <input type="date" class="form-control" @bind="currentUnavailability.StartDate" />
                         </div>
-                        <div class="form-group" style="flex: 1;">
+                        <div class="form-group flex-1">
                             <label class="form-label">To Date *</label>
                             <input type="date" class="form-control" @bind="currentUnavailability.EndDate" />
                         </div>
                     </div>
                     <div class="form-row">
-                        <div class="form-group" style="flex: 1;">
+                        <div class="form-group flex-1">
                             <label class="form-label">Hours per day</label>
                             <select class="form-control" @bind="currentUnavailability.Hours">
                                 <option value="8">8 (Full day)</option>
@@ -223,13 +210,13 @@
                                 <option value="1">1</option>
                             </select>
                         </div>
-                        <div class="form-group" style="flex: 1;">
+                        <div class="form-group flex-1">
                             <label class="form-label">Reason</label>
                             <select class="form-control" @bind="currentUnavailability.Reason">
-                                <option value="@UnavailabilityReason.PTO">PTO</option>
-                                <option value="@UnavailabilityReason.Holiday">Holiday</option>
-                                <option value="@UnavailabilityReason.SickLeave">Sick Leave</option>
-                                <option value="@UnavailabilityReason.Other">Other</option>
+                                @foreach (var reason in Enum.GetValues<UnavailabilityReason>())
+                                {
+                                    <option value="@reason">@DisplayHelpers.GetReasonDisplayName(reason)</option>
+                                }
                             </select>
                         </div>
                     </div>
@@ -264,7 +251,7 @@
                                                 <span> - @u.EndDate.ToString("MMM dd, yyyy")</span>
                                             }
                                         </span>
-                                        <span class="badge @GetReasonBadgeClass(u.Reason)">@GetReasonDisplayName(u.Reason)</span>
+                                        <span class="badge @GetReasonBadgeClass(u.Reason)">@DisplayHelpers.GetReasonDisplayName(u.Reason)</span>
                                         <span class="unavailability-hours">@u.Hours h/day</span>
                                         @if (!string.IsNullOrWhiteSpace(u.Notes))
                                         {
@@ -273,7 +260,7 @@
                                     </div>
                                     <div class="unavailability-actions">
                                         <button class="btn btn-secondary btn-sm" @onclick="() => EditUnavailability(u)">Edit</button>
-                                        <button class="btn btn-danger btn-sm" @onclick="() => DeleteUnavailability(u)">Delete</button>
+                                        <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDeleteUnavailability(u)">Delete</button>
                                     </div>
                                 </div>
                             }
@@ -291,9 +278,9 @@
 @if (showImportModal)
 {
     <div class="modal-backdrop" @onclick="CloseImportModal">
-        <div class="modal modal-lg" @onclick:stopPropagation="true">
+        <div class="modal modal-lg" @onclick:stopPropagation="true" role="dialog" aria-labelledby="modal-title-import">
             <div class="modal-header">
-                <h3 class="modal-title">Import Leaves from CSV</h3>
+                <h3 class="modal-title" id="modal-title-import">Import Leaves from CSV</h3>
                 <button class="modal-close" @onclick="CloseImportModal">&times;</button>
             </div>
             <div class="modal-body">
@@ -392,6 +379,16 @@
     </div>
 }
 
+<ConfirmDeleteModal Visible="showDeleteResourceConfirm"
+    Message="@($"Are you sure you want to delete resource \"{resourceToDelete?.Name}\"? This will also delete all their allocations and unavailability records.")"
+    OnConfirm="DeleteResource"
+    OnCancel="CancelDeleteResource" />
+
+<ConfirmDeleteModal Visible="showDeleteUnavailabilityConfirm"
+    Message="@("Are you sure you want to delete this unavailability record?")"
+    OnConfirm="DeleteUnavailability"
+    OnCancel="CancelDeleteUnavailability" />
+
 @code {
     private List<Resource> resources = new();
     private List<Role> roles = new();
@@ -406,6 +403,12 @@
     private int selectedRoleId = 0;
     private int selectedVendorId = 0;
     private HashSet<int> selectedSkillIds = new();
+
+    // Delete confirmations
+    private bool showDeleteResourceConfirm = false;
+    private Resource? resourceToDelete = null;
+    private bool showDeleteUnavailabilityConfirm = false;
+    private ResourceUnavailability? unavailabilityToDelete = null;
 
     // Unavailability management
     private bool showUnavailabilityModal = false;
@@ -466,7 +469,6 @@
 
     private IEnumerable<Resource> PagedResources => SortedResources.Skip((currentPage - 1) * pageSize).Take(pageSize);
     private int TotalCount => FilteredResources.Count();
-    private int TotalPages => (int)Math.Ceiling(TotalCount / (double)pageSize);
 
     private void SetSort(string column)
     {
@@ -482,16 +484,8 @@
 
     private string GetSortClass(string column) => sortColumn == column ? (sortAscending ? "asc" : "desc") : "";
 
-    private void GoToPage(int pg) => currentPage = Math.Max(1, Math.Min(pg, TotalPages));
+    private void GoToPage(int pg) => currentPage = pg;
     private void ResetPage() => currentPage = 1;
-
-    private IEnumerable<int> GetPageNumbers()
-    {
-        var start = Math.Max(1, currentPage - 2);
-        var end = Math.Min(TotalPages, currentPage + 2);
-        if (end - start < 4) { if (start == 1) end = Math.Min(TotalPages, start + 4); else start = Math.Max(1, end - 4); }
-        return Enumerable.Range(start, end - start + 1);
-    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -585,10 +579,25 @@
         CloseModal();
     }
 
-    private async Task DeleteResource(Resource resource)
+    private void ConfirmDeleteResource(Resource resource)
     {
-        DbContext.Resources.Remove(resource);
+        resourceToDelete = resource;
+        showDeleteResourceConfirm = true;
+    }
+
+    private void CancelDeleteResource()
+    {
+        resourceToDelete = null;
+        showDeleteResourceConfirm = false;
+    }
+
+    private async Task DeleteResource()
+    {
+        if (resourceToDelete == null) return;
+        DbContext.Resources.Remove(resourceToDelete);
         await DbContext.SaveChangesAsync();
+        resourceToDelete = null;
+        showDeleteResourceConfirm = false;
         await LoadResources();
     }
 
@@ -713,15 +722,30 @@
         ResetUnavailabilityForm();
     }
 
-    private async Task DeleteUnavailability(ResourceUnavailability u)
+    private void ConfirmDeleteUnavailability(ResourceUnavailability u)
     {
-        var existing = await DbContext.ResourceUnavailabilities.FindAsync(u.Id);
+        unavailabilityToDelete = u;
+        showDeleteUnavailabilityConfirm = true;
+    }
+
+    private void CancelDeleteUnavailability()
+    {
+        unavailabilityToDelete = null;
+        showDeleteUnavailabilityConfirm = false;
+    }
+
+    private async Task DeleteUnavailability()
+    {
+        if (unavailabilityToDelete == null) return;
+        var existing = await DbContext.ResourceUnavailabilities.FindAsync(unavailabilityToDelete.Id);
         if (existing != null)
         {
             DbContext.ResourceUnavailabilities.Remove(existing);
             await DbContext.SaveChangesAsync();
             await LoadResourceUnavailabilities();
         }
+        unavailabilityToDelete = null;
+        showDeleteUnavailabilityConfirm = false;
     }
 
     private string GetReasonBadgeClass(UnavailabilityReason reason) => reason switch
@@ -731,15 +755,6 @@
         UnavailabilityReason.SickLeave => "badge-sick",
         UnavailabilityReason.Other => "badge-other",
         _ => "badge-secondary"
-    };
-
-    private string GetReasonDisplayName(UnavailabilityReason reason) => reason switch
-    {
-        UnavailabilityReason.PTO => "PTO",
-        UnavailabilityReason.Holiday => "Holiday",
-        UnavailabilityReason.SickLeave => "Sick Leave",
-        UnavailabilityReason.Other => "Other",
-        _ => reason.ToString()
     };
 
     // Import methods

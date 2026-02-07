@@ -20,11 +20,11 @@
         <table>
             <thead>
                 <tr>
-                    <th class="sortable @(GetSortClass("Order"))" @onclick='() => SetSort("Order")'>Order</th>
-                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")'>Health Name</th>
+                    <th class="sortable @(GetSortClass("Order"))" @onclick='() => SetSort("Order")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Order"))">Order</th>
+                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Name"))">Health Name</th>
                     <th>Color</th>
                     <th>Preview</th>
-                    <th class="sortable @(GetSortClass("Projects"))" @onclick='() => SetSort("Projects")'>Projects</th>
+                    <th class="sortable @(GetSortClass("Projects"))" @onclick='() => SetSort("Projects")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Projects"))">Projects</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -48,7 +48,7 @@
                             <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(health)">Edit</button>
                             @if (health.Projects.Count == 0)
                             {
-                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteHealth(health)">Delete</button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDelete(health)">Delete</button>
                             }
                         </td>
                     </tr>
@@ -57,28 +57,15 @@
         </table>
     </div>
 
-    @if (TotalPages > 1)
-    {
-        <div class="pagination">
-            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(1)">First</button>
-            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)">Prev</button>
-            @foreach (var pageNum in GetPageNumbers())
-            {
-                <button class="pagination-btn @(pageNum == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">@pageNum</button>
-            }
-            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(currentPage + 1)">Next</button>
-            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)">Last</button>
-            <span class="pagination-info">Showing @(((currentPage - 1) * pageSize) + 1)-@(Math.Min(currentPage * pageSize, TotalCount)) of @TotalCount</span>
-        </div>
-    }
+    <PaginationBar CurrentPage="currentPage" PageSize="pageSize" TotalCount="TotalCount" OnPageChanged="GoToPage" />
 </div>
 
 @if (showModal)
 {
     <div class="modal-backdrop" @onclick="CloseModal">
-        <div class="modal" @onclick:stopPropagation="true">
+        <div class="modal" @onclick:stopPropagation="true" role="dialog" aria-labelledby="modal-title-health">
             <div class="modal-header">
-                <h3 class="modal-title">@(isEditing ? "Edit Health" : "Add Health")</h3>
+                <h3 class="modal-title" id="modal-title-health">@(isEditing ? "Edit Health" : "Add Health")</h3>
                 <button class="modal-close" @onclick="CloseModal">&times;</button>
             </div>
             <div class="modal-body">
@@ -87,8 +74,12 @@
                     <input type="text" class="form-control" @bind="currentHealth.Name" />
                     @if (!string.IsNullOrEmpty(healthError))
                     {
-                        <div class="text-danger" style="margin-top: 0.25rem; font-size: 0.875rem;">@healthError</div>
+                        <div class="text-danger field-validation-error">@healthError</div>
                     }
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Short Name</label>
+                    <input type="text" class="form-control" @bind="currentHealth.ShortName" maxlength="10" placeholder="e.g. OK, Risk, Late" />
                 </div>
                 <div class="form-group">
                     <label class="form-label">Display Order</label>
@@ -116,12 +107,19 @@
     </div>
 }
 
+<ConfirmDeleteModal Visible="showDeleteConfirm"
+    Message="@($"Are you sure you want to delete health \"{healthToDelete?.Name}\"?")"
+    OnConfirm="DeleteHealth"
+    OnCancel="CancelDelete" />
+
 @code {
     private List<ProjectHealth> healths = new();
     private bool showModal = false;
     private bool isEditing = false;
     private ProjectHealth currentHealth = new();
     private string? healthError = null;
+    private bool showDeleteConfirm = false;
+    private ProjectHealth? healthToDelete = null;
 
     // Pagination & Sorting
     private int currentPage = 1;
@@ -145,9 +143,8 @@
 
     private IEnumerable<ProjectHealth> PagedHealths => SortedHealths.Skip((currentPage - 1) * pageSize).Take(pageSize);
     private int TotalCount => healths.Count;
-    private int TotalPages => (int)Math.Ceiling(TotalCount / (double)pageSize);
 
-    private void GoToPage(int pg) => currentPage = Math.Max(1, Math.Min(pg, TotalPages));
+    private void GoToPage(int pg) => currentPage = pg;
 
     private void SetSort(string column)
     {
@@ -162,14 +159,6 @@
     }
 
     private string GetSortClass(string column) => sortColumn == column ? (sortAscending ? "asc" : "desc") : "";
-
-    private IEnumerable<int> GetPageNumbers()
-    {
-        var start = Math.Max(1, currentPage - 2);
-        var end = Math.Min(TotalPages, currentPage + 2);
-        if (end - start < 4) { if (start == 1) end = Math.Min(TotalPages, start + 4); else start = Math.Max(1, end - 4); }
-        return Enumerable.Range(start, end - start + 1);
-    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -192,7 +181,7 @@
 
     private void OpenEditModal(ProjectHealth health)
     {
-        currentHealth = new ProjectHealth { Id = health.Id, Name = health.Name, Color = health.Color, DisplayOrder = health.DisplayOrder };
+        currentHealth = new ProjectHealth { Id = health.Id, Name = health.Name, Color = health.Color, DisplayOrder = health.DisplayOrder, ShortName = health.ShortName };
         isEditing = true;
         healthError = null;
         showModal = true;
@@ -226,6 +215,7 @@
                 existing.Name = currentHealth.Name;
                 existing.Color = currentHealth.Color;
                 existing.DisplayOrder = currentHealth.DisplayOrder;
+                existing.ShortName = currentHealth.ShortName;
                 await DbContext.SaveChangesAsync();
             }
         }
@@ -239,10 +229,25 @@
         CloseModal();
     }
 
-    private async Task DeleteHealth(ProjectHealth health)
+    private void ConfirmDelete(ProjectHealth health)
     {
-        DbContext.ProjectHealths.Remove(health);
+        healthToDelete = health;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        healthToDelete = null;
+        showDeleteConfirm = false;
+    }
+
+    private async Task DeleteHealth()
+    {
+        if (healthToDelete == null) return;
+        DbContext.ProjectHealths.Remove(healthToDelete);
         await DbContext.SaveChangesAsync();
+        healthToDelete = null;
+        showDeleteConfirm = false;
         await LoadHealths();
     }
 }

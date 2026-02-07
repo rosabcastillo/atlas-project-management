@@ -20,8 +20,8 @@
         <table>
             <thead>
                 <tr>
-                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")'>Vendor Name</th>
-                    <th class="sortable @(GetSortClass("Resources"))" @onclick='() => SetSort("Resources")'>Resources</th>
+                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Name"))">Vendor Name</th>
+                    <th class="sortable @(GetSortClass("Resources"))" @onclick='() => SetSort("Resources")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Resources"))">Resources</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -35,7 +35,7 @@
                             <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(vendor)">Edit</button>
                             @if (vendor.Resources.Count == 0)
                             {
-                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteVendor(vendor)">Delete</button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDelete(vendor)">Delete</button>
                             }
                         </td>
                     </tr>
@@ -44,28 +44,15 @@
         </table>
     </div>
 
-    @if (TotalPages > 1)
-    {
-        <div class="pagination">
-            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(1)">First</button>
-            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)">Prev</button>
-            @foreach (var pageNum in GetPageNumbers())
-            {
-                <button class="pagination-btn @(pageNum == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">@pageNum</button>
-            }
-            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(currentPage + 1)">Next</button>
-            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)">Last</button>
-            <span class="pagination-info">Showing @(((currentPage - 1) * pageSize) + 1)-@(Math.Min(currentPage * pageSize, TotalCount)) of @TotalCount</span>
-        </div>
-    }
+    <PaginationBar CurrentPage="currentPage" PageSize="pageSize" TotalCount="TotalCount" OnPageChanged="GoToPage" />
 </div>
 
 @if (showModal)
 {
     <div class="modal-backdrop" @onclick="CloseModal">
-        <div class="modal" @onclick:stopPropagation="true">
+        <div class="modal" @onclick:stopPropagation="true" role="dialog" aria-labelledby="modal-title-vendor">
             <div class="modal-header">
-                <h3 class="modal-title">@(isEditing ? "Edit Vendor" : "Add Vendor")</h3>
+                <h3 class="modal-title" id="modal-title-vendor">@(isEditing ? "Edit Vendor" : "Add Vendor")</h3>
                 <button class="modal-close" @onclick="CloseModal">&times;</button>
             </div>
             <div class="modal-body">
@@ -74,7 +61,7 @@
                     <input type="text" class="form-control" @bind="currentVendor.Name" />
                     @if (!string.IsNullOrEmpty(vendorError))
                     {
-                        <div class="text-danger" style="margin-top: 0.25rem; font-size: 0.875rem;">@vendorError</div>
+                        <div class="text-danger field-validation-error">@vendorError</div>
                     }
                 </div>
             </div>
@@ -86,12 +73,19 @@
     </div>
 }
 
+<ConfirmDeleteModal Visible="showDeleteConfirm"
+    Message="@($"Are you sure you want to delete vendor \"{vendorToDelete?.Name}\"?")"
+    OnConfirm="DeleteVendor"
+    OnCancel="CancelDelete" />
+
 @code {
     private List<Vendor> vendors = new();
     private bool showModal = false;
     private bool isEditing = false;
     private Vendor currentVendor = new();
     private string? vendorError = null;
+    private bool showDeleteConfirm = false;
+    private Vendor? vendorToDelete = null;
 
     // Pagination & Sorting
     private int currentPage = 1;
@@ -114,9 +108,8 @@
 
     private IEnumerable<Vendor> PagedVendors => SortedVendors.Skip((currentPage - 1) * pageSize).Take(pageSize);
     private int TotalCount => vendors.Count;
-    private int TotalPages => (int)Math.Ceiling(TotalCount / (double)pageSize);
 
-    private void GoToPage(int pg) => currentPage = Math.Max(1, Math.Min(pg, TotalPages));
+    private void GoToPage(int pg) => currentPage = pg;
 
     private void SetSort(string column)
     {
@@ -131,14 +124,6 @@
     }
 
     private string GetSortClass(string column) => sortColumn == column ? (sortAscending ? "asc" : "desc") : "";
-
-    private IEnumerable<int> GetPageNumbers()
-    {
-        var start = Math.Max(1, currentPage - 2);
-        var end = Math.Min(TotalPages, currentPage + 2);
-        if (end - start < 4) { if (start == 1) end = Math.Min(TotalPages, start + 4); else start = Math.Max(1, end - 4); }
-        return Enumerable.Range(start, end - start + 1);
-    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -201,10 +186,25 @@
         CloseModal();
     }
 
-    private async Task DeleteVendor(Vendor vendor)
+    private void ConfirmDelete(Vendor vendor)
     {
-        DbContext.Vendors.Remove(vendor);
+        vendorToDelete = vendor;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        vendorToDelete = null;
+        showDeleteConfirm = false;
+    }
+
+    private async Task DeleteVendor()
+    {
+        if (vendorToDelete == null) return;
+        DbContext.Vendors.Remove(vendorToDelete);
         await DbContext.SaveChangesAsync();
+        vendorToDelete = null;
+        showDeleteConfirm = false;
         await LoadVendors();
     }
 }

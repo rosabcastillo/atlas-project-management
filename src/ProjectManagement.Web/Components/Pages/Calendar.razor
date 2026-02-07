@@ -613,7 +613,7 @@
             .Select(u => new UnavailabilityDisplay
             {
                 UnavailabilityId = u.Id,
-                Label = GetReasonDisplayName(u.Reason),
+                Label = DisplayHelpers.GetReasonDisplayName(u.Reason),
                 Reason = u.Reason,
                 Hours = u.Hours,
                 StartDate = u.StartDate,
@@ -656,7 +656,7 @@
 
     private string BuildUnavailabilityTooltip(ResourceUnavailability u)
     {
-        var text = GetReasonDisplayName(u.Reason);
+        var text = DisplayHelpers.GetReasonDisplayName(u.Reason);
         if (u.Hours < 8)
             text += $" ({u.Hours}h/day)";
         else
@@ -669,15 +669,6 @@
 
         return text;
     }
-
-    private string GetReasonDisplayName(UnavailabilityReason reason) => reason switch
-    {
-        UnavailabilityReason.PTO => "PTO",
-        UnavailabilityReason.Holiday => "Holiday",
-        UnavailabilityReason.SickLeave => "Sick Leave",
-        UnavailabilityReason.Other => "Other",
-        _ => reason.ToString()
-    };
 
     private string GetProjectColor(int projectId) => ProjectPalette[projectId % ProjectPalette.Length];
     private string GetResourceColor(int resourceId) => ResourcePalette[resourceId % ResourcePalette.Length];
@@ -847,7 +838,7 @@
                 ProjectName = project.Name,
                 HealthName = project.Health?.Name,
                 HealthColor = project.Health?.Color ?? "#6b7280",
-                HealthShort = GetHealthShortName(project.Health?.Name),
+                HealthShort = project.Health?.ShortName ?? GetHealthShortName(project.Health?.Name),
                 Color = GetProjectColor(projectId),
                 PilotGoLiveDate = project.TargetPilotGoLiveDate,
                 EnterpriseGoLiveDate = project.TargetEnterpriseGoLiveDate
@@ -912,13 +903,13 @@
 
                     tr.Unavailabilities.Add(new TimelineUnavailability
                     {
-                        Reason = GetReasonDisplayName(u.Reason),
+                        Reason = DisplayHelpers.GetReasonDisplayName(u.Reason),
                         Hours = u.Hours,
                         StartDate = u.StartDate,
                         EndDate = u.EndDate,
                         BarLeftPct = (double)(uStart - tStart).Days / totalDays * 100,
                         BarWidthPct = (double)((uEnd - uStart).Days + 1) / totalDays * 100,
-                        TooltipText = $"{GetReasonDisplayName(u.Reason)}{(u.Hours < 8 ? $" ({u.Hours}h/day)" : "")}: {u.StartDate:MMM dd} - {u.EndDate:MMM dd, yyyy}"
+                        TooltipText = $"{DisplayHelpers.GetReasonDisplayName(u.Reason)}{(u.Hours < 8 ? $" ({u.Hours}h/day)" : "")}: {u.StartDate:MMM dd} - {u.EndDate:MMM dd, yyyy}"
                     });
                 }
 
@@ -1000,12 +991,6 @@
     private string GetHealthShortName(string? healthName)
     {
         if (healthName == null) return "";
-        // Abbreviate common health names for compact display
-        if (healthName.Contains("Target", StringComparison.OrdinalIgnoreCase)) return "OK";
-        if (healthName.Contains("Risk", StringComparison.OrdinalIgnoreCase)) return "Risk";
-        if (healthName.Contains("Delay", StringComparison.OrdinalIgnoreCase)) return "Late";
-        if (healthName.Contains("Complete", StringComparison.OrdinalIgnoreCase)) return "Done";
-        // For custom health names, take first 4 chars
         return healthName.Length > 4 ? healthName[..4] : healthName;
     }
 

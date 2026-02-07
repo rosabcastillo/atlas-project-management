@@ -27,17 +27,17 @@
     <div class="skill-tags" style="gap: 0.75rem; padding: 1rem 0;">
         @foreach (var skill in FilteredSkills)
         {
-            <div class="skill-tag" style="font-size: 0.875rem; padding: 0.5rem 1rem; position: relative;">
+            <div class="skill-tag skill-tag-lg">
                 @skill.Name
-                <span style="margin-left: 0.5rem; opacity: 0.6;">(@skill.ResourceSkills.Count)</span>
-                <button style="background: none; border: none; margin-left: 0.5rem; cursor: pointer; color: inherit; opacity: 0.6;"
-                        @onclick="() => OpenEditModal(skill)" title="Edit">
+                <span class="skill-tag-count">(@skill.ResourceSkills.Count)</span>
+                <button class="skill-tag-action"
+                        @onclick="() => OpenEditModal(skill)" title="Edit" aria-label="Edit skill @skill.Name">
                     ✏️
                 </button>
                 @if (skill.ResourceSkills.Count == 0)
                 {
-                    <button style="background: none; border: none; cursor: pointer; color: inherit; opacity: 0.6;"
-                            @onclick="() => DeleteSkill(skill)" title="Delete">
+                    <button class="skill-tag-action"
+                            @onclick="() => ConfirmDelete(skill)" title="Delete" aria-label="Delete skill @skill.Name">
                         ❌
                     </button>
                 }
@@ -57,9 +57,9 @@
 @if (showModal)
 {
     <div class="modal-backdrop" @onclick="CloseModal">
-        <div class="modal" @onclick:stopPropagation="true">
+        <div class="modal" @onclick:stopPropagation="true" role="dialog" aria-labelledby="modal-title-skill">
             <div class="modal-header">
-                <h3 class="modal-title">@(isEditing ? "Edit Skill" : "Add Skill")</h3>
+                <h3 class="modal-title" id="modal-title-skill">@(isEditing ? "Edit Skill" : "Add Skill")</h3>
                 <button class="modal-close" @onclick="CloseModal">&times;</button>
             </div>
             <div class="modal-body">
@@ -68,7 +68,7 @@
                     <input type="text" class="form-control" @bind="currentSkill.Name" />
                     @if (!string.IsNullOrEmpty(skillError))
                     {
-                        <div class="text-danger" style="margin-top: 0.25rem; font-size: 0.875rem;">@skillError</div>
+                        <div class="text-danger field-validation-error">@skillError</div>
                     }
                 </div>
             </div>
@@ -80,6 +80,11 @@
     </div>
 }
 
+<ConfirmDeleteModal Visible="showDeleteConfirm"
+    Message="@($"Are you sure you want to delete skill \"{skillToDelete?.Name}\"?")"
+    OnConfirm="DeleteSkill"
+    OnCancel="CancelDelete" />
+
 @code {
     private List<Skill> skills = new();
     private string searchTerm = "";
@@ -87,6 +92,8 @@
     private bool isEditing = false;
     private Skill currentSkill = new();
     private string? skillError = null;
+    private bool showDeleteConfirm = false;
+    private Skill? skillToDelete = null;
 
     private IEnumerable<Skill> FilteredSkills => string.IsNullOrWhiteSpace(searchTerm)
         ? skills
@@ -165,10 +172,25 @@
         CloseModal();
     }
 
-    private async Task DeleteSkill(Skill skill)
+    private void ConfirmDelete(Skill skill)
     {
-        DbContext.Skills.Remove(skill);
+        skillToDelete = skill;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        skillToDelete = null;
+        showDeleteConfirm = false;
+    }
+
+    private async Task DeleteSkill()
+    {
+        if (skillToDelete == null) return;
+        DbContext.Skills.Remove(skillToDelete);
         await DbContext.SaveChangesAsync();
+        skillToDelete = null;
+        showDeleteConfirm = false;
         await LoadSkills();
     }
 }

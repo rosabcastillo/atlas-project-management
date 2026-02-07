@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using ProjectManagement.Domain.Enums;
 
 namespace ProjectManagement.Domain.Entities;
@@ -5,7 +6,11 @@ namespace ProjectManagement.Domain.Entities;
 public class Project
 {
     public int Id { get; set; }
+
+    [Required, MaxLength(200)]
     public string Name { get; set; } = string.Empty;
+
+    [MaxLength(200)]
     public string? AccountableLead { get; set; }
     public DeliveryMethod? DeliveryMethod { get; set; }
     public Priority? Priority { get; set; }

@@ -20,11 +20,11 @@
         <table>
             <thead>
                 <tr>
-                    <th class="sortable @(GetSortClass("Order"))" @onclick='() => SetSort("Order")'>Order</th>
-                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")'>Status Name</th>
+                    <th class="sortable @(GetSortClass("Order"))" @onclick='() => SetSort("Order")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Order"))">Order</th>
+                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Name"))">Status Name</th>
                     <th>Color</th>
                     <th>Preview</th>
-                    <th class="sortable @(GetSortClass("Projects"))" @onclick='() => SetSort("Projects")'>Projects</th>
+                    <th class="sortable @(GetSortClass("Projects"))" @onclick='() => SetSort("Projects")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Projects"))">Projects</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -48,7 +48,7 @@
                             <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(status)">Edit</button>
                             @if (status.Projects.Count == 0)
                             {
-                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteStatus(status)">Delete</button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDelete(status)">Delete</button>
                             }
                         </td>
                     </tr>
@@ -57,34 +57,25 @@
         </table>
     </div>
 
-    @if (TotalPages > 1)
-    {
-        <div class="pagination">
-            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(1)">First</button>
-            <button class="pagination-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)">Prev</button>
-            @foreach (var pageNum in GetPageNumbers())
-            {
-                <button class="pagination-btn @(pageNum == currentPage ? "active" : "")" @onclick="() => GoToPage(pageNum)">@pageNum</button>
-            }
-            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(currentPage + 1)">Next</button>
-            <button class="pagination-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(TotalPages)">Last</button>
-            <span class="pagination-info">Showing @(((currentPage - 1) * pageSize) + 1)-@(Math.Min(currentPage * pageSize, TotalCount)) of @TotalCount</span>
-        </div>
-    }
+    <PaginationBar CurrentPage="currentPage" PageSize="pageSize" TotalCount="TotalCount" OnPageChanged="GoToPage" />
 </div>
 
 @if (showModal)
 {
     <div class="modal-backdrop" @onclick="CloseModal">
-        <div class="modal" @onclick:stopPropagation="true">
+        <div class="modal" @onclick:stopPropagation="true" role="dialog" aria-labelledby="modal-title-status">
             <div class="modal-header">
-                <h3 class="modal-title">@(isEditing ? "Edit Status" : "Add Status")</h3>
+                <h3 class="modal-title" id="modal-title-status">@(isEditing ? "Edit Status" : "Add Status")</h3>
                 <button class="modal-close" @onclick="CloseModal">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
                     <label class="form-label">Status Name *</label>
                     <input type="text" class="form-control" @bind="currentStatus.Name" />
+                    @if (!string.IsNullOrEmpty(statusError))
+                    {
+                        <div class="text-danger field-validation-error">@statusError</div>
+                    }
                 </div>
                 <div class="form-group">
                     <label class="form-label">Display Order</label>
@@ -112,11 +103,19 @@
     </div>
 }
 
+<ConfirmDeleteModal Visible="showDeleteConfirm"
+    Message="@($"Are you sure you want to delete status \"{statusToDelete?.Name}\"?")"
+    OnConfirm="DeleteStatus"
+    OnCancel="CancelDelete" />
+
 @code {
     private List<ProjectStatus> statuses = new();
     private bool showModal = false;
     private bool isEditing = false;
     private ProjectStatus currentStatus = new();
+    private string? statusError = null;
+    private bool showDeleteConfirm = false;
+    private ProjectStatus? statusToDelete = null;
 
     // Pagination & Sorting
     private int currentPage = 1;
@@ -140,9 +139,8 @@
 
     private IEnumerable<ProjectStatus> PagedStatuses => SortedStatuses.Skip((currentPage - 1) * pageSize).Take(pageSize);
     private int TotalCount => statuses.Count;
-    private int TotalPages => (int)Math.Ceiling(TotalCount / (double)pageSize);
 
-    private void GoToPage(int pg) => currentPage = Math.Max(1, Math.Min(pg, TotalPages));
+    private void GoToPage(int pg) => currentPage = pg;
 
     private void SetSort(string column)
     {
@@ -157,14 +155,6 @@
     }
 
     private string GetSortClass(string column) => sortColumn == column ? (sortAscending ? "asc" : "desc") : "";
-
-    private IEnumerable<int> GetPageNumbers()
-    {
-        var start = Math.Max(1, currentPage - 2);
-        var end = Math.Min(TotalPages, currentPage + 2);
-        if (end - start < 4) { if (start == 1) end = Math.Min(TotalPages, start + 4); else start = Math.Max(1, end - 4); }
-        return Enumerable.Range(start, end - start + 1);
-    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -181,6 +171,7 @@
         var maxOrder = statuses.Any() ? statuses.Max(s => s.DisplayOrder) : 0;
         currentStatus = new ProjectStatus { DisplayOrder = maxOrder + 1, Color = "#6b7280" };
         isEditing = false;
+        statusError = null;
         showModal = true;
     }
 
@@ -188,14 +179,25 @@
     {
         currentStatus = new ProjectStatus { Id = status.Id, Name = status.Name, Color = status.Color, DisplayOrder = status.DisplayOrder };
         isEditing = true;
+        statusError = null;
         showModal = true;
     }
 
-    private void CloseModal() => showModal = false;
+    private void CloseModal() { statusError = null; showModal = false; }
 
     private async Task SaveStatus()
     {
+        statusError = null;
         if (string.IsNullOrWhiteSpace(currentStatus.Name)) return;
+
+        var nameToCheck = currentStatus.Name.Trim().ToLower();
+        var duplicate = await DbContext.ProjectStatuses
+            .AnyAsync(s => s.Name.ToLower() == nameToCheck && (!isEditing || s.Id != currentStatus.Id));
+        if (duplicate)
+        {
+            statusError = "A status with this name already exists.";
+            return;
+        }
 
         if (isEditing)
         {
@@ -218,10 +220,25 @@
         CloseModal();
     }
 
-    private async Task DeleteStatus(ProjectStatus status)
+    private void ConfirmDelete(ProjectStatus status)
     {
-        DbContext.ProjectStatuses.Remove(status);
+        statusToDelete = status;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        statusToDelete = null;
+        showDeleteConfirm = false;
+    }
+
+    private async Task DeleteStatus()
+    {
+        if (statusToDelete == null) return;
+        DbContext.ProjectStatuses.Remove(statusToDelete);
         await DbContext.SaveChangesAsync();
+        statusToDelete = null;
+        showDeleteConfirm = false;
         await LoadStatuses();
     }
 }

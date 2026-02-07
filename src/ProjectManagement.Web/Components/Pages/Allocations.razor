@@ -26,13 +26,13 @@
             </div>
             <div class="date-filter">
                 <label>From:</label>
-                <input type="date" class="form-control" @bind="filterStartDate" style="width: auto;" />
+                <input type="date" class="form-control w-auto" @bind="filterStartDate" />
             </div>
             <div class="date-filter">
                 <label>To:</label>
-                <input type="date" class="form-control" @bind="filterEndDate" style="width: auto;" />
+                <input type="date" class="form-control w-auto" @bind="filterEndDate" />
             </div>
-            <select class="form-control" style="width: auto;" @bind="selectedRoleId" @bind:after="OnFilterChanged">
+            <select class="form-control w-auto" @bind="selectedRoleId" @bind:after="OnFilterChanged">
                 <option value="0">All Roles</option>
                 @foreach (var role in roles)
                 {
@@ -50,8 +50,8 @@
         <table>
             <thead>
                 <tr>
-                    <th class="sortable @(GetSortClass("Resource"))" @onclick='() => SetSort("Resource")'>Resource</th>
-                    <th class="sortable @(GetSortClass("Role"))" @onclick='() => SetSort("Role")'>Role</th>
+                    <th class="sortable @(GetSortClass("Resource"))" @onclick='() => SetSort("Resource")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Resource"))">Resource</th>
+                    <th class="sortable @(GetSortClass("Role"))" @onclick='() => SetSort("Role")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Role"))">Role</th>
                     <th>Max Allocation</th>
                     <th>Allocations</th>
                     <th>Actions</th>
@@ -69,7 +69,7 @@
                         <td>
                             @if (hasAllocations)
                             {
-                                <button class="expand-btn" @onclick="() => ToggleResource(resource.Id)">
+                                <button class="expand-btn" @onclick="() => ToggleResource(resource.Id)" aria-expanded="@isExpanded" aria-label="@(isExpanded ? "Collapse" : "Expand") allocations for @resource.Name">
                                     @(isExpanded ? "▼" : "▶")
                                 </button>
                             }
@@ -80,7 +80,7 @@
                             <strong>@resource.Name</strong>
                             @if (isTerminated)
                             {
-                                <span class="badge badge-danger" style="margin-left: 8px;">Terminated</span>
+                                <span class="badge badge-danger ms-2">Terminated</span>
                             }
                         </td>
                         <td>
@@ -148,7 +148,7 @@
                                                         <span class="allocation-percentage-badge">@(allocation.Percentage ?? 0)%</span>
                                                     }
                                                     <button class="btn btn-secondary btn-xs" @onclick="() => OpenEditModal(allocation)">Edit</button>
-                                                    <button class="btn btn-danger btn-xs" @onclick="() => DeleteAllocation(allocation)">Delete</button>
+                                                    <button class="btn btn-danger btn-xs" @onclick="() => ConfirmDelete(allocation)">Delete</button>
                                                 </div>
                                             </div>
                                         }
@@ -174,9 +174,9 @@
 @if (showModal)
 {
     <div class="modal-backdrop" @onclick="CloseModal">
-        <div class="modal modal-lg" @onclick:stopPropagation="true">
+        <div class="modal modal-lg" @onclick:stopPropagation="true" role="dialog" aria-labelledby="modal-title-allocation">
             <div class="modal-header">
-                <h3 class="modal-title">@(isEditing ? "Edit Allocation" : "Add Allocation")</h3>
+                <h3 class="modal-title" id="modal-title-allocation">@(isEditing ? "Edit Allocation" : "Add Allocation")</h3>
                 <button class="modal-close" @onclick="CloseModal">&times;</button>
             </div>
             <div class="modal-body">
@@ -251,54 +251,18 @@
     </div>
 }
 
-<style>
-    .date-filter {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .date-filter label {
-        font-size: 14px;
-        color: var(--text-secondary);
-        white-space: nowrap;
-    }
-
-    .allocation-dates {
-        font-size: 12px;
-        color: var(--text-muted);
-        margin-left: 12px;
-    }
-
-    .overlap-badge {
-        font-size: 11px;
-        background: rgba(245, 158, 11, 0.2);
-        color: var(--warning);
-        padding: 2px 8px;
-        border-radius: 4px;
-        margin-left: 8px;
-    }
-
-    .allocation-item.has-overlap {
-        border-left: 3px solid var(--warning);
-        padding-left: 12px;
-    }
-
-    .form-row {
-        display: flex;
-        gap: 16px;
-    }
-
-    .form-group-half {
-        flex: 1;
-    }
-</style>
+<ConfirmDeleteModal Visible="showDeleteConfirm"
+    Message="@($"Are you sure you want to delete the allocation for \"{allocationToDelete?.Resource?.Name}\" on \"{allocationToDelete?.Project?.Name}\"?")"
+    OnConfirm="DeleteAllocation"
+    OnCancel="CancelDelete" />
 
 @code {
     private List<Allocation> allocations = new();
     private List<Resource> resources = new();
     private List<Project> projects = new();
     private List<Role> roles = new();
+    private bool showDeleteConfirm = false;
+    private Allocation? allocationToDelete = null;
 
     private string searchTerm = "";
     private int selectedRoleId = 0;
@@ -458,10 +422,7 @@
 
     private string GetSortClass(string column) => sortColumn == column ? (sortAscending ? "asc" : "desc") : "";
 
-    private async Task OnFilterChanged()
-    {
-        await Task.CompletedTask;
-    }
+    private void OnFilterChanged() { }
 
     protected override async Task OnInitializedAsync()
     {
@@ -672,9 +633,24 @@
         }
     }
 
-    private async Task DeleteAllocation(Allocation allocation)
+    private void ConfirmDelete(Allocation allocation)
     {
-        await AllocationService.DeleteAllocationAsync(allocation.Id);
+        allocationToDelete = allocation;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        allocationToDelete = null;
+        showDeleteConfirm = false;
+    }
+
+    private async Task DeleteAllocation()
+    {
+        if (allocationToDelete == null) return;
+        await AllocationService.DeleteAllocationAsync(allocationToDelete.Id);
+        allocationToDelete = null;
+        showDeleteConfirm = false;
         await LoadAllocations();
     }
 }

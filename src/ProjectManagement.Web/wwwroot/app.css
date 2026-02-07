@@ -25,6 +25,26 @@
 .text-danger { color: var(--danger); }
 .text-success { color: var(--success); }
 .text-warning { color: var(--warning); }
+.w-auto { width: auto; }
+.flex-1 { flex: 1; }
+.ms-2 { margin-left: 0.5rem; }
+
+/* Date filter */
+.date-filter { display: flex; align-items: center; gap: 8px; }
+.date-filter label { font-size: 14px; color: var(--text-secondary); white-space: nowrap; }
+
+/* Overlap styles */
+.overlap-badge { font-size: 11px; background: rgba(245, 158, 11, 0.2); color: var(--warning); padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+.allocation-item.has-overlap { border-left: 3px solid var(--warning); padding-left: 12px; }
+
+/* Allocation dates */
+.allocation-dates { font-size: 12px; color: var(--text-muted); margin-left: 12px; }
+
+/* Skill tag variants */
+.skill-tag-lg { font-size: 0.875rem; padding: 0.5rem 1rem; position: relative; }
+.skill-tag-count { margin-left: 0.5rem; opacity: 0.6; }
+.skill-tag-action { background: none; border: none; margin-left: 0.5rem; cursor: pointer; color: inherit; opacity: 0.6; padding: 0; }
+.skill-tag-action:hover { opacity: 1; }
 
 .row-terminated {
     opacity: 0.6;
@@ -1631,6 +1651,11 @@ tr:hover td {
     color: var(--danger);
     font-size: 0.75rem;
     margin-top: 0.25rem;
+}
+
+.field-validation-error {
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
 }
 
 /* ===== NAV SECTION ===== */

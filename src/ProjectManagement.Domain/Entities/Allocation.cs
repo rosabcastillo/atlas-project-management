@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace ProjectManagement.Domain.Entities;
 
 public class Allocation
@@ -13,6 +15,7 @@ public class Allocation
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
 
+    [Range(1, 100)]
     public int? Percentage { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

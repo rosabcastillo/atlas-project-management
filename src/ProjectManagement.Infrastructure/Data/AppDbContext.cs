@@ -33,12 +33,14 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ResourceSkill>()
             .HasOne(rs => rs.Resource)
             .WithMany(r => r.ResourceSkills)
-            .HasForeignKey(rs => rs.ResourceId);
+            .HasForeignKey(rs => rs.ResourceId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<ResourceSkill>()
             .HasOne(rs => rs.Skill)
             .WithMany(s => s.ResourceSkills)
-            .HasForeignKey(rs => rs.SkillId);
+            .HasForeignKey(rs => rs.SkillId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Resource relationships
         modelBuilder.Entity<Resource>()
@@ -56,16 +58,21 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Allocation>()
             .HasOne(a => a.Resource)
             .WithMany(r => r.Allocations)
-            .HasForeignKey(a => a.ResourceId);
+            .HasForeignKey(a => a.ResourceId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<Allocation>()
             .HasOne(a => a.Project)
             .WithMany(p => p.Allocations)
-            .HasForeignKey(a => a.ProjectId);
+            .HasForeignKey(a => a.ProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-        // Index for faster queries on allocation date ranges
+        // Indexes for faster queries on allocation date ranges
         modelBuilder.Entity<Allocation>()
             .HasIndex(a => new { a.ResourceId, a.StartDate, a.EndDate });
+
+        modelBuilder.Entity<Allocation>()
+            .HasIndex(a => new { a.ProjectId, a.StartDate, a.EndDate });
 
         // ResourceUnavailability relationships
         modelBuilder.Entity<ResourceUnavailability>()
