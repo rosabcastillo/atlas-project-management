@@ -32,7 +32,7 @@
                 <label>To:</label>
                 <input type="date" class="form-control w-auto" @bind="filterEndDate" />
             </div>
-            <select class="form-control w-auto" @bind="selectedRoleId" @bind:after="OnFilterChanged">
+            <select class="form-control w-auto-sm" @bind="selectedRoleId" @bind:after="OnFilterChanged">
                 <option value="0">All Roles</option>
                 @foreach (var role in roles)
                 {
@@ -85,12 +85,17 @@
                             }
                         </td>
                         <td>
-                            <span class="badge @(resource.Role.RequiresCapacity ? "badge-primary" : "badge-secondary")">
-                                @resource.Role.Name
-                            </span>
+                            <div class="skill-tags">
+                                @foreach (var rr in resource.ResourceRoles)
+                                {
+                                    <span class="badge @(rr.Role.RequiresCapacity ? "badge-primary" : "badge-secondary")">
+                                        @rr.Role.Name
+                                    </span>
+                                }
+                            </div>
                         </td>
                         <td>
-                            @if (resource.Role.RequiresCapacity)
+                            @if (resource.ResourceRoles.Any(rr => rr.Role.RequiresCapacity))
                             {
                                 var maxOverlap = GetMaxOverlapAllocation(resource.Id);
                                 var hasOverlap = HasOverlappingDates(resource.Id);
@@ -144,7 +149,7 @@
                                                     }
                                                 </div>
                                                 <div class="allocation-item-actions">
-                                                    @if (resource.Role.RequiresCapacity)
+                                                    @if (resource.ResourceRoles.Any(rr => rr.Role.RequiresCapacity))
                                                     {
                                                         <span class="allocation-percentage-badge">@(allocation.Percentage ?? 0)%</span>
                                                     }
@@ -200,7 +205,7 @@
                         <option value="0">Select a resource...</option>
                         @foreach (var resource in resources.Where(r => !r.EndDate.HasValue || r.EndDate.Value >= DateTime.Today))
                         {
-                            <option value="@resource.Id">@resource.Name (@resource.Role.Name)</option>
+                            <option value="@resource.Id">@resource.Name (@string.Join(", ", resource.ResourceRoles.Select(rr => rr.Role.Name)))</option>
                         }
                     </select>
                 </div>
@@ -299,7 +304,7 @@
                 filtered = filtered.Where(r => r.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
 
             if (selectedRoleId > 0)
-                filtered = filtered.Where(r => r.RoleId == selectedRoleId);
+                filtered = filtered.Where(r => r.ResourceRoles.Any(rr => rr.RoleId == selectedRoleId));
 
             // If date range is specified, only show resources with allocations in that range
             if (filterStartDate.HasValue && filterEndDate.HasValue)
@@ -322,7 +327,7 @@
             return sortColumn switch
             {
                 "Resource" => sortAscending ? data.OrderBy(r => r.Name) : data.OrderByDescending(r => r.Name),
-                "Role" => sortAscending ? data.OrderBy(r => r.Role.Name) : data.OrderByDescending(r => r.Role.Name),
+                "Role" => sortAscending ? data.OrderBy(r => r.ResourceRoles.FirstOrDefault()?.Role.Name ?? "zzz") : data.OrderByDescending(r => r.ResourceRoles.FirstOrDefault()?.Role.Name ?? ""),
                 _ => data.OrderBy(r => r.Name)
             };
         }
@@ -427,7 +432,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        resources = await DbContext.Resources.Include(r => r.Role).OrderBy(r => r.Name).ToListAsync();
+        resources = await DbContext.Resources.Include(r => r.ResourceRoles).ThenInclude(rr => rr.Role).OrderBy(r => r.Name).ToListAsync();
         projects = await DbContext.Projects.OrderBy(p => p.Name).ToListAsync();
         roles = await DbContext.Roles.OrderBy(r => r.Name).ToListAsync();
         await LoadAllocations();
@@ -436,7 +441,7 @@
     private async Task LoadAllocations()
     {
         allocations = await DbContext.Allocations
-            .Include(a => a.Resource).ThenInclude(r => r.Role)
+            .Include(a => a.Resource).ThenInclude(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
             .Include(a => a.Project)
             .ToListAsync();
     }
@@ -491,7 +496,7 @@
         modalStartDate = DateTime.Today;
         modalEndDate = DateTime.Today.AddMonths(1);
         modalPercentage = null;
-        showPercentageField = resource.Role.RequiresCapacity;
+        showPercentageField = resource.ResourceRoles.Any(rr => rr.Role.RequiresCapacity);
         errorMessage = "";
         successMessage = "";
         overlapWarningMessage = null;
@@ -507,7 +512,7 @@
         modalStartDate = allocation.StartDate;
         modalEndDate = allocation.EndDate;
         modalPercentage = allocation.Percentage;
-        showPercentageField = allocation.Resource.Role.RequiresCapacity;
+        showPercentageField = allocation.Resource.ResourceRoles.Any(rr => rr.Role.RequiresCapacity);
         errorMessage = "";
         successMessage = "";
         overlapWarningMessage = null;
@@ -528,7 +533,7 @@
         var resource = resources.FirstOrDefault(r => r.Id == modalResourceId);
         if (resource != null)
         {
-            showPercentageField = resource.Role.RequiresCapacity;
+            showPercentageField = resource.ResourceRoles.Any(rr => rr.Role.RequiresCapacity);
             if (!showPercentageField) modalPercentage = null;
         }
     }
@@ -558,7 +563,7 @@
         }
 
         var resource = resources.First(r => r.Id == modalResourceId);
-        var requiresCapacity = resource.Role.RequiresCapacity;
+        var requiresCapacity = resource.ResourceRoles.Any(rr => rr.Role.RequiresCapacity);
 
         if (requiresCapacity && (!modalPercentage.HasValue || modalPercentage < 1 || modalPercentage > 100))
         {

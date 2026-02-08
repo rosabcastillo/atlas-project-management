@@ -26,7 +26,7 @@ public class AllocationService
         int? percentage)
     {
         var resource = await _resourceRepository.Query()
-            .Include(r => r.Role)
+            .Include(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
             .FirstOrDefaultAsync(r => r.Id == resourceId);
 
         if (resource == null)
@@ -44,7 +44,7 @@ public class AllocationService
         var overlappingAllocations = await GetOverlappingAllocationsAsync(resourceId, startDate, endDate);
         var newPercentage = percentage ?? 0;
 
-        if (resource.Role.RequiresCapacity)
+        if (resource.ResourceRoles.Any(rr => rr.Role.RequiresCapacity))
         {
             if (!percentage.HasValue)
                 return AllocationResult.Error("Percentage is required for this role", 0, null);
@@ -87,7 +87,7 @@ public class AllocationService
         int? newPercentage)
     {
         var allocation = await _allocationRepository.Query()
-            .Include(a => a.Resource).ThenInclude(r => r.Role)
+            .Include(a => a.Resource).ThenInclude(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
             .FirstOrDefaultAsync(a => a.Id == allocationId);
 
         if (allocation == null)
@@ -110,7 +110,7 @@ public class AllocationService
 
         var newPercentageValue = percentage ?? 0;
 
-        if (allocation.Resource.Role.RequiresCapacity)
+        if (allocation.Resource.ResourceRoles.Any(rr => rr.Role.RequiresCapacity))
         {
             if (!percentage.HasValue)
                 return AllocationResult.Error("Percentage is required for this role", 0, null);
@@ -146,7 +146,7 @@ public class AllocationService
     {
         var query = _allocationRepository.Query()
             .Include(a => a.Project)
-            .Include(a => a.Resource).ThenInclude(r => r.Role)
+            .Include(a => a.Resource).ThenInclude(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
             .Where(a => a.ResourceId == resourceId &&
                        a.StartDate <= endDate &&
                        a.EndDate >= startDate);
@@ -259,7 +259,7 @@ public class AllocationService
         DateTime? endDate = null)
     {
         var resource = await _resourceRepository.Query()
-            .Include(r => r.Role)
+            .Include(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
             .FirstOrDefaultAsync(r => r.Id == resourceId);
 
         if (resource == null)
@@ -267,7 +267,7 @@ public class AllocationService
 
         var query = _allocationRepository.Query()
             .Include(a => a.Project)
-            .Include(a => a.Resource).ThenInclude(r => r.Role)
+            .Include(a => a.Resource).ThenInclude(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
             .Where(a => a.ResourceId == resourceId);
 
         if (startDate.HasValue && endDate.HasValue)
@@ -282,12 +282,12 @@ public class AllocationService
         {
             ResourceId = resourceId,
             ResourceName = resource.Name,
-            RoleName = resource.Role.Name,
-            RequiresCapacity = resource.Role.RequiresCapacity,
+            RoleName = string.Join(", ", resource.ResourceRoles.Select(rr => rr.Role.Name)),
+            RequiresCapacity = resource.ResourceRoles.Any(rr => rr.Role.RequiresCapacity),
             StartDate = startDate,
             EndDate = endDate,
             TotalPercentage = allocations
-                .Where(a => a.Resource.Role.RequiresCapacity && a.Percentage.HasValue)
+                .Where(a => a.Resource.ResourceRoles.Any(rr => rr.Role.RequiresCapacity) && a.Percentage.HasValue)
                 .Sum(a => a.Percentage ?? 0),
             ProjectAllocations = allocations.Select(a => new ProjectAllocation
             {
@@ -295,7 +295,7 @@ public class AllocationService
                 ProjectId = a.ProjectId,
                 ProjectName = a.Project.Name,
                 Percentage = a.Percentage,
-                RoleName = a.Resource.Role.Name,
+                RoleName = string.Join(", ", a.Resource.ResourceRoles.Select(rr => rr.Role.Name)),
                 StartDate = a.StartDate,
                 EndDate = a.EndDate
             }).ToList()

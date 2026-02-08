@@ -197,7 +197,10 @@
                                                      @ondragend="OnDragEnd">
                                                     <span class="drag-handle">⋮⋮</span>
                                                     <span class="allocation-resource">@allocation.Resource.Name</span>
-                                                    <span class="badge badge-info">@allocation.Resource.Role.Name</span>
+                                                    @foreach (var rr in allocation.Resource.ResourceRoles)
+                                                    {
+                                                        <span class="badge badge-info">@rr.Role.Name</span>
+                                                    }
                                                     <span class="allocation-dates">@allocation.StartDate.ToString("MMM dd") - @allocation.EndDate.ToString("MMM dd")</span>
                                                     @if (allocation.Percentage.HasValue)
                                                     {
@@ -264,7 +267,7 @@
                         <option value="">Select...</option>
                         @foreach (var resource in leadResources)
                         {
-                            <option value="@resource.Name">@resource.Name (@resource.Role.Name)</option>
+                            <option value="@resource.Name">@resource.Name (@string.Join(", ", resource.ResourceRoles.Select(rr => rr.Role.Name)))</option>
                         }
                     </select>
                 </div>
@@ -345,7 +348,7 @@
             </div>
             <div class="modal-body">
                 <div class="move-summary">
-                    <p>Moving <strong>@allocationToMove.Resource.Name</strong> (@allocationToMove.Resource.Role.Name)</p>
+                    <p>Moving <strong>@allocationToMove.Resource.Name</strong> (@string.Join(", ", allocationToMove.Resource.ResourceRoles.Select(rr => rr.Role.Name)))</p>
                     <p class="move-direction">
                         <span class="from-project">@allocationToMove.Project.Name</span>
                         <span class="move-arrow">→</span>
@@ -359,9 +362,9 @@
                     <div class="role-conflict-warning">
                         <span class="warning-icon">⚠️</span>
                         <div class="warning-content">
-                            <strong>@allocationToMove.Resource.Role.Name already exists</strong>
-                            <p><strong>@existingRoleHolder</strong> is already assigned as @allocationToMove.Resource.Role.Name for this project in the same period.</p>
-                            <p>Do you want to add another @allocationToMove.Resource.Role.Name to this project?</p>
+                            <strong>@conflictRoleName already exists</strong>
+                            <p><strong>@existingRoleHolder</strong> is already assigned as @conflictRoleName for this project in the same period.</p>
+                            <p>Do you want to add another @conflictRoleName to this project?</p>
                         </div>
                     </div>
                 }
@@ -474,6 +477,7 @@
     private bool keepSameCapacity = true;
     private bool hasExistingRoleConflict = false;
     private string existingRoleHolder = "";
+    private string conflictRoleName = "";
     private bool isEditing = false;
     private Project currentProject = new();
     private string selectedDeliveryMethod = "";
@@ -571,8 +575,8 @@
     private async Task LoadLeadResources()
     {
         leadResources = await DbContext.Resources
-            .Include(r => r.Role)
-            .Where(r => LeadRoleNames.Contains(r.Role.Name.ToLower()))
+            .Include(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
+            .Where(r => r.ResourceRoles.Any(rr => LeadRoleNames.Contains(rr.Role.Name.ToLower())))
             .OrderBy(r => r.Name)
             .ToListAsync();
     }
@@ -585,7 +589,8 @@
             .Include(p => p.Health)
             .Include(p => p.Allocations)
                 .ThenInclude(a => a.Resource)
-                    .ThenInclude(r => r.Role)
+                    .ThenInclude(r => r.ResourceRoles)
+                        .ThenInclude(rr => rr.Role)
             .OrderBy(p => p.Name)
             .ToListAsync();
         accountableLeads = projects
@@ -872,15 +877,16 @@
         // Check for existing SM or PO in target project for overlapping date range
         hasExistingRoleConflict = false;
         existingRoleHolder = "";
+        conflictRoleName = "";
 
-        var roleName = draggedAllocation.Resource.Role.Name;
-        if (roleName == "Scrum Master" || roleName == "Product Owner")
+        var draggedRoleNames = draggedAllocation.Resource.ResourceRoles.Select(rr => rr.Role.Name).ToList();
+        var targetProject2 = projects.FirstOrDefault(p => p.Id == targetProjectId);
+        if (targetProject2 != null)
         {
-            var targetProject = projects.FirstOrDefault(p => p.Id == targetProjectId);
-            if (targetProject != null)
+            foreach (var roleName in draggedRoleNames.Where(n => n == "Scrum Master" || n == "Product Owner"))
             {
-                var existingAllocation = targetProject.Allocations
-                    .FirstOrDefault(a => a.Resource.Role.Name == roleName &&
+                var existingAllocation = targetProject2.Allocations
+                    .FirstOrDefault(a => a.Resource.ResourceRoles.Any(rr => rr.Role.Name == roleName) &&
                                         a.StartDate <= draggedAllocation.EndDate &&
                                         a.EndDate >= draggedAllocation.StartDate);
 
@@ -888,6 +894,8 @@
                 {
                     hasExistingRoleConflict = true;
                     existingRoleHolder = existingAllocation.Resource.Name;
+                    conflictRoleName = roleName;
+                    break;
                 }
             }
         }
@@ -907,6 +915,7 @@
         keepSameCapacity = true;
         hasExistingRoleConflict = false;
         existingRoleHolder = "";
+        conflictRoleName = "";
     }
 
     private async Task ConfirmMove()

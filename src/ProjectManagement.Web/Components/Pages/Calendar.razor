@@ -40,7 +40,7 @@
                     <option value="0">Select a resource...</option>
                     @foreach (var resource in resources)
                     {
-                        <option value="@resource.Id">@resource.Name (@resource.Role.Name)</option>
+                        <option value="@resource.Id">@resource.Name (@string.Join(", ", resource.ResourceRoles.Select(rr => rr.Role.Name)))</option>
                     }
                 </select>
             }
@@ -408,7 +408,7 @@
                 <div class="legend-item">
                     <span class="legend-color" style="background-color: @GetResourceColor(alloc.ResourceId);"></span>
                     <span class="legend-label">@alloc.Resource.Name</span>
-                    <span class="legend-role">@alloc.Resource.Role.Name</span>
+                    <span class="legend-role">@string.Join(", ", alloc.Resource.ResourceRoles.Select(rr => rr.Role.Name))</span>
                 </div>
             }
         </div>
@@ -511,7 +511,7 @@
     protected override async Task OnInitializedAsync()
     {
         resources = await DbContext.Resources
-            .Include(r => r.Role)
+            .Include(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
             .OrderBy(r => r.Name)
             .ToListAsync();
 
@@ -523,7 +523,7 @@
             .ToListAsync();
 
         allocations = await DbContext.Allocations
-            .Include(a => a.Resource).ThenInclude(r => r.Role)
+            .Include(a => a.Resource).ThenInclude(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
             .Include(a => a.Project)
             .ToListAsync();
 
@@ -582,7 +582,7 @@
                 .Where(a => a.ProjectId == selectedProjectId &&
                            a.StartDate <= lastDay &&
                            a.EndDate >= firstDay)
-                .OrderBy(a => a.Resource.Role.Name)
+                .OrderBy(a => a.Resource.ResourceRoles.FirstOrDefault()?.Role.Name ?? "")
                 .ThenBy(a => a.Resource.Name)
                 .ToList();
         }
@@ -650,7 +650,7 @@
     {
         var text = viewMode == "Resource"
             ? $"{a.Project.Name}"
-            : $"{a.Resource.Name} ({a.Resource.Role.Name})";
+            : $"{a.Resource.Name} ({string.Join(", ", a.Resource.ResourceRoles.Select(rr => rr.Role.Name))})";
 
         if (a.Percentage.HasValue)
             text += $" - {a.Percentage}%";

@@ -11,5 +11,5 @@ public class Role
     public bool RequiresCapacity { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public ICollection<Resource> Resources { get; set; } = new List<Resource>();
+    public ICollection<ResourceRole> ResourceRoles { get; set; } = new List<ResourceRole>();
 }

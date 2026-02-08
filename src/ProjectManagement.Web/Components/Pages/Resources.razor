@@ -68,9 +68,14 @@
                             }
                         </td>
                         <td>
-                            <span class="badge @(resource.Role.RequiresCapacity ? "badge-primary" : "badge-secondary")">
-                                @resource.Role.Name
-                            </span>
+                            <div class="skill-tags">
+                                @foreach (var rr in resource.ResourceRoles)
+                                {
+                                    <span class="badge @(rr.Role.RequiresCapacity ? "badge-primary" : "badge-secondary")">
+                                        @rr.Role.Name
+                                    </span>
+                                }
+                            </div>
                         </td>
                         <td>@(resource.Vendor?.Name ?? "-")</td>
                         <td>
@@ -127,14 +132,16 @@
                     }
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Role *</label>
-                    <select class="form-control" @bind="selectedRoleId">
-                        <option value="0">Select a role...</option>
+                    <label class="form-label">Role(s) *</label>
+                    <div class="skill-tags">
                         @foreach (var role in roles)
                         {
-                            <option value="@role.Id">@role.Name</option>
+                            <span class="skill-tag @(selectedRoleIds.Contains(role.Id) ? "selected" : "")"
+                                  @onclick="() => ToggleRole(role.Id)">
+                                @role.Name
+                            </span>
                         }
-                    </select>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Vendor</label>
@@ -400,7 +407,7 @@
     private bool showModal = false;
     private bool isEditing = false;
     private Resource currentResource = new();
-    private int selectedRoleId = 0;
+    private HashSet<int> selectedRoleIds = new();
     private int selectedVendorId = 0;
     private HashSet<int> selectedSkillIds = new();
 
@@ -440,7 +447,7 @@
                 filtered = filtered.Where(r => r.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
 
             if (filterRoleId > 0)
-                filtered = filtered.Where(r => r.RoleId == filterRoleId);
+                filtered = filtered.Where(r => r.ResourceRoles.Any(rr => rr.RoleId == filterRoleId));
 
             if (filterVendorId == -1)
                 filtered = filtered.Where(r => r.VendorId == null);
@@ -459,7 +466,7 @@
             return sortColumn switch
             {
                 "Name" => sortAscending ? data.OrderBy(r => r.Name) : data.OrderByDescending(r => r.Name),
-                "Role" => sortAscending ? data.OrderBy(r => r.Role.Name) : data.OrderByDescending(r => r.Role.Name),
+                "Role" => sortAscending ? data.OrderBy(r => r.ResourceRoles.FirstOrDefault()?.Role.Name ?? "zzz") : data.OrderByDescending(r => r.ResourceRoles.FirstOrDefault()?.Role.Name ?? ""),
                 "Vendor" => sortAscending ? data.OrderBy(r => r.Vendor?.Name ?? "zzz") : data.OrderByDescending(r => r.Vendor?.Name ?? ""),
                 "EndDate" => sortAscending ? data.OrderBy(r => r.EndDate ?? DateTime.MaxValue) : data.OrderByDescending(r => r.EndDate ?? DateTime.MinValue),
                 _ => data.OrderBy(r => r.Name)
@@ -498,7 +505,7 @@
     private async Task LoadResources()
     {
         resources = await DbContext.Resources
-            .Include(r => r.Role)
+            .Include(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
             .Include(r => r.Vendor)
             .Include(r => r.ResourceSkills).ThenInclude(rs => rs.Skill)
             .ToListAsync();
@@ -507,7 +514,7 @@
     private void OpenAddModal()
     {
         currentResource = new Resource();
-        selectedRoleId = 0;
+        selectedRoleIds = new HashSet<int>();
         selectedVendorId = 0;
         selectedSkillIds = new HashSet<int>();
         isEditing = false;
@@ -517,8 +524,8 @@
 
     private void OpenEditModal(Resource resource)
     {
-        currentResource = new Resource { Id = resource.Id, Name = resource.Name, RoleId = resource.RoleId, VendorId = resource.VendorId, EndDate = resource.EndDate };
-        selectedRoleId = resource.RoleId;
+        currentResource = new Resource { Id = resource.Id, Name = resource.Name, VendorId = resource.VendorId, EndDate = resource.EndDate };
+        selectedRoleIds = resource.ResourceRoles.Select(rr => rr.RoleId).ToHashSet();
         selectedVendorId = resource.VendorId ?? 0;
         selectedSkillIds = resource.ResourceSkills.Select(rs => rs.SkillId).ToHashSet();
         isEditing = true;
@@ -527,6 +534,12 @@
     }
 
     private void CloseModal() { resourceError = null; showModal = false; }
+
+    private void ToggleRole(int roleId)
+    {
+        if (selectedRoleIds.Contains(roleId)) selectedRoleIds.Remove(roleId);
+        else selectedRoleIds.Add(roleId);
+    }
 
     private void ToggleSkill(int skillId)
     {
@@ -537,7 +550,7 @@
     private async Task SaveResource()
     {
         resourceError = null;
-        if (string.IsNullOrWhiteSpace(currentResource.Name) || selectedRoleId == 0) return;
+        if (string.IsNullOrWhiteSpace(currentResource.Name) || selectedRoleIds.Count == 0) return;
 
         var nameToCheck = currentResource.Name.Trim().ToLower();
         var duplicate = await DbContext.Resources
@@ -548,18 +561,22 @@
             return;
         }
 
-        currentResource.RoleId = selectedRoleId;
         currentResource.VendorId = selectedVendorId == 0 ? null : selectedVendorId;
 
         if (isEditing)
         {
-            var existing = await DbContext.Resources.Include(r => r.ResourceSkills).FirstOrDefaultAsync(r => r.Id == currentResource.Id);
+            var existing = await DbContext.Resources
+                .Include(r => r.ResourceRoles)
+                .Include(r => r.ResourceSkills)
+                .FirstOrDefaultAsync(r => r.Id == currentResource.Id);
             if (existing != null)
             {
                 existing.Name = currentResource.Name;
-                existing.RoleId = currentResource.RoleId;
                 existing.VendorId = currentResource.VendorId;
                 existing.EndDate = currentResource.EndDate;
+                DbContext.ResourceRoles.RemoveRange(existing.ResourceRoles);
+                foreach (var roleId in selectedRoleIds)
+                    DbContext.ResourceRoles.Add(new ResourceRole { ResourceId = existing.Id, RoleId = roleId });
                 DbContext.ResourceSkills.RemoveRange(existing.ResourceSkills);
                 foreach (var skillId in selectedSkillIds)
                     DbContext.ResourceSkills.Add(new ResourceSkill { ResourceId = existing.Id, SkillId = skillId });
@@ -570,6 +587,8 @@
         {
             DbContext.Resources.Add(currentResource);
             await DbContext.SaveChangesAsync();
+            foreach (var roleId in selectedRoleIds)
+                DbContext.ResourceRoles.Add(new ResourceRole { ResourceId = currentResource.Id, RoleId = roleId });
             foreach (var skillId in selectedSkillIds)
                 DbContext.ResourceSkills.Add(new ResourceSkill { ResourceId = currentResource.Id, SkillId = skillId });
             await DbContext.SaveChangesAsync();

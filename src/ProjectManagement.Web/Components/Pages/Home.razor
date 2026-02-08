@@ -135,7 +135,7 @@
             .Select(r => new ResourceByRole
             {
                 RoleName = r.Name,
-                Count = r.Resources.Count,
+                Count = r.ResourceRoles.Count,
                 RequiresCapacity = r.RequiresCapacity
             })
             .ToListAsync();
@@ -147,9 +147,9 @@
 
         // Calculate over-allocated (resources with >100% allocation in any overlapping period)
         var resourcesWithCapacity = await DbContext.Resources
-            .Include(r => r.Role)
+            .Include(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
             .Include(r => r.Allocations)
-            .Where(r => r.Role.RequiresCapacity)
+            .Where(r => r.ResourceRoles.Any(rr => rr.Role.RequiresCapacity))
             .ToListAsync();
 
         foreach (var resource in resourcesWithCapacity)

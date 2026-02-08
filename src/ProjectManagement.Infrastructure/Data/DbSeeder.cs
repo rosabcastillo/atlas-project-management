@@ -169,34 +169,53 @@ public static class DbSeeder
             var resources = new List<Resource>
             {
                 // Scrum Masters
-                new() { Name = "Rosa", RoleId = smRole.Id },
-                new() { Name = "Tarandeep", RoleId = smRole.Id },
-                new() { Name = "Joe", RoleId = smRole.Id },
+                new() { Name = "Rosa" },
+                new() { Name = "Tarandeep" },
+                new() { Name = "Joe" },
 
                 // Product Owners
-                new() { Name = "Jess P", RoleId = poRole.Id },
-                new() { Name = "Emily R", RoleId = poRole.Id },
-                new() { Name = "Sean D", RoleId = poRole.Id },
+                new() { Name = "Jess P" },
+                new() { Name = "Emily R" },
+                new() { Name = "Sean D" },
 
                 // BAs
-                new() { Name = "Shubham Sarathe", RoleId = baRole.Id },
-                new() { Name = "JP", RoleId = baRole.Id },
-                new() { Name = "Annie", RoleId = baRole.Id },
-                new() { Name = "Peggy", RoleId = baRole.Id },
-                new() { Name = "Swamy Bommidi", RoleId = baRole.Id, VendorId = bridgenext.Id },
-                new() { Name = "Haritha", RoleId = baRole.Id },
-                new() { Name = "Simran", RoleId = baRole.Id },
-                new() { Name = "Jakob", RoleId = baRole.Id, VendorId = independent.Id },
-                new() { Name = "Emma", RoleId = baRole.Id },
+                new() { Name = "Shubham Sarathe" },
+                new() { Name = "JP" },
+                new() { Name = "Annie" },
+                new() { Name = "Peggy" },
+                new() { Name = "Swamy Bommidi", VendorId = bridgenext.Id },
+                new() { Name = "Haritha" },
+                new() { Name = "Simran" },
+                new() { Name = "Jakob", VendorId = independent.Id },
+                new() { Name = "Emma" },
 
                 // Developers
-                new() { Name = "Harsh Darji", RoleId = devRole.Id, VendorId = bridgenext.Id },
-                new() { Name = "Priyanka Gat", RoleId = devRole.Id, VendorId = bridgenext.Id },
-                new() { Name = "Priyanka Tekale", RoleId = devRole.Id, VendorId = bridgenext.Id },
-                new() { Name = "Shweta Dabholkar", RoleId = devRole.Id, VendorId = bridgenext.Id },
-                new() { Name = "Suyog Arde", RoleId = devRole.Id, VendorId = bridgenext.Id }
+                new() { Name = "Harsh Darji", VendorId = bridgenext.Id },
+                new() { Name = "Priyanka Gat", VendorId = bridgenext.Id },
+                new() { Name = "Priyanka Tekale", VendorId = bridgenext.Id },
+                new() { Name = "Shweta Dabholkar", VendorId = bridgenext.Id },
+                new() { Name = "Suyog Arde", VendorId = bridgenext.Id }
             };
             await context.Resources.AddRangeAsync(resources);
+            await context.SaveChangesAsync();
+
+            // Assign roles to resources
+            var smNames = new[] { "Rosa", "Tarandeep", "Joe" };
+            var poNames = new[] { "Jess P", "Emily R", "Sean D" };
+            var baNames = new[] { "Shubham Sarathe", "JP", "Annie", "Peggy", "Swamy Bommidi", "Haritha", "Simran", "Jakob", "Emma" };
+            var devNames = new[] { "Harsh Darji", "Priyanka Gat", "Priyanka Tekale", "Shweta Dabholkar", "Suyog Arde" };
+
+            var resourceRoles = new List<ResourceRole>();
+            foreach (var r in resources.Where(r => smNames.Contains(r.Name)))
+                resourceRoles.Add(new ResourceRole { ResourceId = r.Id, RoleId = smRole.Id });
+            foreach (var r in resources.Where(r => poNames.Contains(r.Name)))
+                resourceRoles.Add(new ResourceRole { ResourceId = r.Id, RoleId = poRole.Id });
+            foreach (var r in resources.Where(r => baNames.Contains(r.Name)))
+                resourceRoles.Add(new ResourceRole { ResourceId = r.Id, RoleId = baRole.Id });
+            foreach (var r in resources.Where(r => devNames.Contains(r.Name)))
+                resourceRoles.Add(new ResourceRole { ResourceId = r.Id, RoleId = devRole.Id });
+
+            await context.ResourceRoles.AddRangeAsync(resourceRoles);
             await context.SaveChangesAsync();
 
             // Assign skills to developers
@@ -206,7 +225,7 @@ public static class DbSeeder
             var sqlServer = skills.First(s => s.Name == "SQL Server");
             var react = skills.First(s => s.Name == "React");
 
-            var devResources = resources.Where(r => r.RoleId == devRole.Id).ToList();
+            var devResources = resources.Where(r => devNames.Contains(r.Name)).ToList();
             var resourceSkills = new List<ResourceSkill>();
 
             foreach (var dev in devResources)

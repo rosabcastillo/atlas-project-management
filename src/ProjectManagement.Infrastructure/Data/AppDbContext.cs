@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Vendor> Vendors => Set<Vendor>();
     public DbSet<Resource> Resources => Set<Resource>();
+    public DbSet<ResourceRole> ResourceRoles => Set<ResourceRole>();
     public DbSet<ResourceSkill> ResourceSkills => Set<ResourceSkill>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectStatus> ProjectStatuses => Set<ProjectStatus>();
@@ -42,11 +43,23 @@ public class AppDbContext : DbContext
             .HasForeignKey(rs => rs.SkillId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // ResourceRole - composite key (many-to-many)
+        modelBuilder.Entity<ResourceRole>()
+            .HasKey(rr => new { rr.ResourceId, rr.RoleId });
+
+        modelBuilder.Entity<ResourceRole>()
+            .HasOne(rr => rr.Resource)
+            .WithMany(r => r.ResourceRoles)
+            .HasForeignKey(rr => rr.ResourceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ResourceRole>()
+            .HasOne(rr => rr.Role)
+            .WithMany(ro => ro.ResourceRoles)
+            .HasForeignKey(rr => rr.RoleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // Resource relationships
-        modelBuilder.Entity<Resource>()
-            .HasOne(r => r.Role)
-            .WithMany(ro => ro.Resources)
-            .HasForeignKey(r => r.RoleId);
 
         modelBuilder.Entity<Resource>()
             .HasOne(r => r.Vendor)
