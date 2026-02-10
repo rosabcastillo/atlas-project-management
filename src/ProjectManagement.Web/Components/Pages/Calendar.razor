@@ -124,7 +124,7 @@
         @if (selectedProjectIds.Count == 0)
         {
             <div class="calendar-empty-state">
-                <div class="empty-state-icon">📊</div>
+                <div class="empty-state-icon"><i class="icon-chart-no-axes-column"></i></div>
                 <p>Select one or more projects to view the timeline</p>
             </div>
         }
@@ -382,14 +382,14 @@
         @if ((viewMode == "Resource" && selectedResourceId == 0) || (viewMode == "Project" && selectedProjectId == 0))
         {
             <div class="calendar-empty-state">
-                <div class="empty-state-icon">&#x1F4C5;</div>
+                <div class="empty-state-icon"><i class="icon-calendar"></i></div>
                 <p>Select a @(viewMode.ToLower()) to view allocations</p>
             </div>
         }
         else if (!filteredAllocations.Any())
         {
             <div class="calendar-empty-state">
-                <div class="empty-state-icon">&#x1F4ED;</div>
+                <div class="empty-state-icon"><i class="icon-inbox"></i></div>
                 <p>No allocations found for @currentMonth.ToString("MMMM yyyy")</p>
             </div>
         }
@@ -415,14 +415,14 @@
     </div>
 }
 
-@if (viewMode == "Resource" && selectedResourceId > 0 && (filteredAllocations.Any() || filteredUnavailabilities.Any()))
+@if (viewMode == "Resource" && selectedResourceId > 0 && (filteredAllocations.Any() || filteredUnavailabilities.Any() || filteredVendorHolidays.Any()))
 {
     <div class="glass-card calendar-legend-card">
         <div class="glass-card-header">
             <h3 class="glass-card-title">Legend</h3>
         </div>
         <div class="calendar-legend">
-            @if (filteredUnavailabilities.Any())
+            @if (filteredUnavailabilities.Any() || filteredVendorHolidays.Any())
             {
                 <div class="legend-section">
                     <span class="legend-section-title">Unavailability</span>
@@ -476,6 +476,8 @@
     private List<Allocation> filteredAllocations = new();
     private List<ResourceUnavailability> unavailabilities = new();
     private List<ResourceUnavailability> filteredUnavailabilities = new();
+    private List<VendorHoliday> vendorHolidays = new();
+    private List<VendorHoliday> filteredVendorHolidays = new();
 
     private string viewMode = "Resource";
     private int selectedResourceId = 0;
@@ -512,6 +514,7 @@
     {
         resources = await DbContext.Resources
             .Include(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
+            .Include(r => r.Vendor)
             .OrderBy(r => r.Name)
             .ToListAsync();
 
@@ -524,11 +527,16 @@
 
         allocations = await DbContext.Allocations
             .Include(a => a.Resource).ThenInclude(r => r.ResourceRoles).ThenInclude(rr => rr.Role)
+            .Include(a => a.Resource).ThenInclude(r => r.Vendor)
             .Include(a => a.Project)
             .ToListAsync();
 
         unavailabilities = await DbContext.ResourceUnavailabilities
             .Include(u => u.Resource)
+            .ToListAsync();
+
+        vendorHolidays = await DbContext.VendorHolidays
+            .Include(vh => vh.Vendor)
             .ToListAsync();
 
         BuildCalendarGrid();
@@ -598,6 +606,7 @@
         if (viewMode != "Resource" || selectedResourceId <= 0)
         {
             filteredUnavailabilities = new List<ResourceUnavailability>();
+            filteredVendorHolidays = new List<VendorHoliday>();
             return;
         }
 
@@ -610,11 +619,27 @@
                        u.EndDate >= firstDay)
             .OrderBy(u => u.StartDate)
             .ToList();
+
+        // Filter vendor holidays for the selected resource's vendor
+        var resource = resources.FirstOrDefault(r => r.Id == selectedResourceId);
+        if (resource?.VendorId != null)
+        {
+            filteredVendorHolidays = vendorHolidays
+                .Where(vh => vh.VendorId == resource.VendorId &&
+                            vh.Date >= firstDay &&
+                            vh.Date <= lastDay)
+                .OrderBy(vh => vh.Date)
+                .ToList();
+        }
+        else
+        {
+            filteredVendorHolidays = new List<VendorHoliday>();
+        }
     }
 
     private List<UnavailabilityDisplay> GetUnavailabilitiesForDay(DateTime day)
     {
-        return filteredUnavailabilities
+        var result = filteredUnavailabilities
             .Where(u => u.StartDate <= day && u.EndDate >= day)
             .Select(u => new UnavailabilityDisplay
             {
@@ -627,6 +652,23 @@
                 TooltipText = BuildUnavailabilityTooltip(u)
             })
             .ToList();
+
+        // Add vendor holidays for this day
+        var holidaysForDay = filteredVendorHolidays
+            .Where(vh => vh.Date.Date == day.Date)
+            .Select(vh => new UnavailabilityDisplay
+            {
+                UnavailabilityId = -vh.Id,
+                Label = $"Holiday: {vh.Name}",
+                Reason = UnavailabilityReason.Holiday,
+                Hours = 8,
+                StartDate = vh.Date,
+                EndDate = vh.Date,
+                TooltipText = $"Organization Holiday: {vh.Name}\n{vh.Date:MMM dd, yyyy}"
+            });
+
+        result.AddRange(holidaysForDay);
+        return result;
     }
 
     private List<AllocationDisplay> GetAllocationsForDay(DateTime day)
@@ -920,6 +962,29 @@
                         BarWidthPct = (double)((uEnd - uStart).Days + 1) / totalDays * 100,
                         TooltipText = $"{DisplayHelpers.GetReasonDisplayName(u.Reason)}{(u.Hours < 8 ? $" ({u.Hours}h/day)" : "")}: {u.StartDate:MMM dd} - {u.EndDate:MMM dd, yyyy}"
                     });
+                }
+
+                // Add vendor holidays for this resource
+                var resourceObj = alloc.Resource;
+                if (resourceObj.VendorId != null)
+                {
+                    var resourceVendorHolidays = vendorHolidays
+                        .Where(vh => vh.VendorId == resourceObj.VendorId && vh.Date >= tStart && vh.Date <= tEnd)
+                        .ToList();
+
+                    foreach (var vh in resourceVendorHolidays)
+                    {
+                        tr.Unavailabilities.Add(new TimelineUnavailability
+                        {
+                            Reason = "Holiday",
+                            Hours = 8,
+                            StartDate = vh.Date,
+                            EndDate = vh.Date,
+                            BarLeftPct = (double)(vh.Date - tStart).Days / totalDays * 100,
+                            BarWidthPct = (double)1 / totalDays * 100,
+                            TooltipText = $"Organization Holiday: {vh.Name}\n{vh.Date:MMM dd, yyyy}"
+                        });
+                    }
                 }
 
                 tp.Resources.Add(tr);

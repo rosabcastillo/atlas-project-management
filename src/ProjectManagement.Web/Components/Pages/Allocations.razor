@@ -15,7 +15,7 @@
         <h1 class="page-title">Allocations</h1>
         <p class="page-subtitle">Manage resource allocations across projects</p>
     </div>
-    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Allocation</button>
+    <button class="btn btn-primary" @onclick="OpenAddModal"><i class="icon-plus"></i> Add Allocation</button>
 </div>
 
 <div class="glass-card">
@@ -108,7 +108,7 @@
                                         @maxOverlap%
                                         @if (hasOverlap)
                                         {
-                                            <span class="overlap-indicator" title="Has overlapping date ranges">⚠️</span>
+                                            <span class="overlap-indicator" title="Has overlapping date ranges"><i class="icon-alert-triangle"></i></span>
                                         }
                                     </span>
                                 </div>
@@ -124,7 +124,7 @@
                         <td>
                             @if (!isTerminated)
                             {
-                                <button class="btn btn-primary btn-sm" @onclick="() => OpenAddModalForResource(resource)">+ Allocate</button>
+                                <button class="btn btn-primary btn-sm" @onclick="() => OpenAddModalForResource(resource)"><i class="icon-plus"></i> Allocate</button>
                             }
                         </td>
                     </tr>
@@ -145,7 +145,7 @@
                                                     </span>
                                                     @if (hasDateOverlap)
                                                     {
-                                                        <span class="overlap-badge" title="Overlaps with @GetOverlappingAllocationsCount(allocation) other allocation(s)">⚠️ Overlap</span>
+                                                        <span class="overlap-badge" title="Overlaps with @GetOverlappingAllocationsCount(allocation) other allocation(s)"><i class="icon-alert-triangle"></i> Overlap</span>
                                                     }
                                                 </div>
                                                 <div class="allocation-item-actions">
@@ -153,8 +153,8 @@
                                                     {
                                                         <span class="allocation-percentage-badge">@(allocation.Percentage ?? 0)%</span>
                                                     }
-                                                    <button class="btn btn-secondary btn-xs" @onclick="() => OpenEditModal(allocation)">Edit</button>
-                                                    <button class="btn btn-danger btn-xs" @onclick="() => ConfirmDelete(allocation)">Delete</button>
+                                                    <button class="btn-icon-action" data-tooltip="Edit" @onclick="() => OpenEditModal(allocation)"><i class="icon-pencil"></i></button>
+                                                    <button class="btn-icon-action danger" data-tooltip="Delete" @onclick="() => ConfirmDelete(allocation)"><i class="icon-trash-2"></i></button>
                                                 </div>
                                             </div>
                                         }
@@ -170,7 +170,7 @@
         @if (!FilteredResources.Any())
         {
             <div class="empty-state">
-                <div class="empty-state-icon">📅</div>
+                <div class="empty-state-icon"><i class="icon-calendar-days"></i></div>
                 <p>No resources found matching your criteria.</p>
             </div>
         }

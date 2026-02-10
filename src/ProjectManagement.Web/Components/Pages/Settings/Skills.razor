@@ -12,7 +12,7 @@
         <h1 class="page-title">Skills</h1>
         <p class="page-subtitle">Manage technical skills and competencies</p>
     </div>
-    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Skill</button>
+    <button class="btn btn-primary" @onclick="OpenAddModal"><i class="icon-plus"></i> Add Skill</button>
 </div>
 
 <div class="glass-card">
@@ -32,13 +32,13 @@
                 <span class="skill-tag-count">(@skill.ResourceSkills.Count)</span>
                 <button class="skill-tag-action"
                         @onclick="() => OpenEditModal(skill)" title="Edit" aria-label="Edit skill @skill.Name">
-                    ✏️
+                    <i class="icon-pencil"></i>
                 </button>
                 @if (skill.ResourceSkills.Count == 0)
                 {
                     <button class="skill-tag-action"
                             @onclick="() => ConfirmDelete(skill)" title="Delete" aria-label="Delete skill @skill.Name">
-                        ❌
+                        <i class="icon-x"></i>
                     </button>
                 }
             </div>
@@ -48,7 +48,7 @@
     @if (!FilteredSkills.Any())
     {
         <div class="empty-state">
-            <div class="empty-state-icon">🛠️</div>
+            <div class="empty-state-icon"><i class="icon-wrench"></i></div>
             <p>No skills found. Add a new skill to get started.</p>
         </div>
     }

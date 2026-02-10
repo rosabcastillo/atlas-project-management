@@ -12,7 +12,7 @@
         <h1 class="page-title">Roles</h1>
         <p class="page-subtitle">Manage resource roles and capacity requirements</p>
     </div>
-    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Role</button>
+    <button class="btn btn-primary" @onclick="OpenAddModal"><i class="icon-plus"></i> Add Role</button>
 </div>
 
 <div class="glass-card">
@@ -43,10 +43,10 @@
                         </td>
                         <td>@role.ResourceRoles.Count</td>
                         <td>
-                            <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(role)">Edit</button>
+                            <button class="btn-icon-action" data-tooltip="Edit" @onclick="() => OpenEditModal(role)"><i class="icon-pencil"></i></button>
                             @if (role.ResourceRoles.Count == 0)
                             {
-                                <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDelete(role)">Delete</button>
+                                <button class="btn-icon-action danger" data-tooltip="Delete" @onclick="() => ConfirmDelete(role)"><i class="icon-trash-2"></i></button>
                             }
                         </td>
                     </tr>

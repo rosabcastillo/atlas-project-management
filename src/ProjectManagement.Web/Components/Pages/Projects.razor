@@ -13,7 +13,7 @@
         <h1 class="page-title">Projects</h1>
         <p class="page-subtitle">Manage your project portfolio</p>
     </div>
-    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Project</button>
+    <button class="btn btn-primary" @onclick="OpenAddModal"><i class="icon-plus"></i> Add Project</button>
 </div>
 
 <div class="glass-card">
@@ -179,8 +179,8 @@
                             <td>@(project.TargetPilotGoLiveDate?.ToString("MMM dd, yyyy") ?? "-")</td>
                             <td>@(project.TargetEnterpriseGoLiveDate?.ToString("MMM dd, yyyy") ?? "-")</td>
                             <td>
-                                <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(project)">Edit</button>
-                                <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDelete(project)">Delete</button>
+                                <button class="btn-icon-action" data-tooltip="Edit" @onclick="() => OpenEditModal(project)"><i class="icon-pencil"></i></button>
+                                <button class="btn-icon-action danger" data-tooltip="Delete" @onclick="() => ConfirmDelete(project)"><i class="icon-trash-2"></i></button>
                             </td>
                         </tr>
                         @if (isExpanded && hasAllocations)
@@ -360,7 +360,7 @@
                 @if (hasExistingRoleConflict)
                 {
                     <div class="role-conflict-warning">
-                        <span class="warning-icon">⚠️</span>
+                        <span class="warning-icon"><i class="icon-alert-triangle"></i></span>
                         <div class="warning-content">
                             <strong>@conflictRoleName already exists</strong>
                             <p><strong>@existingRoleHolder</strong> is already assigned as @conflictRoleName for this project in the same period.</p>

@@ -12,7 +12,7 @@
         <h1 class="page-title">Project Statuses</h1>
         <p class="page-subtitle">Manage project status options and their colors</p>
     </div>
-    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Status</button>
+    <button class="btn btn-primary" @onclick="OpenAddModal"><i class="icon-plus"></i> Add Status</button>
 </div>
 
 <div class="glass-card">
@@ -45,10 +45,10 @@
                         </td>
                         <td>@status.Projects.Count</td>
                         <td>
-                            <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(status)">Edit</button>
+                            <button class="btn-icon-action" data-tooltip="Edit" @onclick="() => OpenEditModal(status)"><i class="icon-pencil"></i></button>
                             @if (status.Projects.Count == 0)
                             {
-                                <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDelete(status)">Delete</button>
+                                <button class="btn-icon-action danger" data-tooltip="Delete" @onclick="() => ConfirmDelete(status)"><i class="icon-trash-2"></i></button>
                             }
                         </td>
                     </tr>

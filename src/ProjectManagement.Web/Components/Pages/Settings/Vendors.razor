@@ -5,14 +5,14 @@
 @inject AppDbContext DbContext
 @rendermode InteractiveServer
 
-<PageTitle>Vendors - Settings</PageTitle>
+<PageTitle>Organizations - Settings</PageTitle>
 
 <div class="page-header">
     <div>
-        <h1 class="page-title">Vendors</h1>
-        <p class="page-subtitle">Manage vendor/contractor companies</p>
+        <h1 class="page-title">Organizations</h1>
+        <p class="page-subtitle">Manage organizations and companies</p>
     </div>
-    <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Vendor</button>
+    <button class="btn btn-primary" @onclick="OpenAddModal"><i class="icon-plus"></i> Add Organization</button>
 </div>
 
 <div class="glass-card">
@@ -20,8 +20,9 @@
         <table>
             <thead>
                 <tr>
-                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Name"))">Vendor Name</th>
+                    <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Name"))">Organization Name</th>
                     <th class="sortable @(GetSortClass("Resources"))" @onclick='() => SetSort("Resources")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Resources"))">Resources</th>
+                    <th class="sortable @(GetSortClass("Holidays"))" @onclick='() => SetSort("Holidays")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Holidays"))">Holidays</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -31,11 +32,13 @@
                     <tr>
                         <td><strong>@vendor.Name</strong></td>
                         <td>@vendor.Resources.Count</td>
+                        <td>@vendor.Holidays.Count</td>
                         <td>
-                            <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(vendor)">Edit</button>
+                            <button class="btn-icon-action" data-tooltip="Edit" @onclick="() => OpenEditModal(vendor)"><i class="icon-pencil"></i></button>
+                            <button class="btn-icon-action" data-tooltip="Holidays" @onclick="() => OpenHolidayModal(vendor)"><i class="icon-party-popper"></i></button>
                             @if (vendor.Resources.Count == 0)
                             {
-                                <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDelete(vendor)">Delete</button>
+                                <button class="btn-icon-action danger" data-tooltip="Delete" @onclick="() => ConfirmDelete(vendor)"><i class="icon-trash-2"></i></button>
                             }
                         </td>
                     </tr>
@@ -52,12 +55,12 @@
     <div class="modal-backdrop" @onclick="CloseModal">
         <div class="modal" @onclick:stopPropagation="true" role="dialog" aria-labelledby="modal-title-vendor">
             <div class="modal-header">
-                <h3 class="modal-title" id="modal-title-vendor">@(isEditing ? "Edit Vendor" : "Add Vendor")</h3>
+                <h3 class="modal-title" id="modal-title-vendor">@(isEditing ? "Edit Organization" : "Add Organization")</h3>
                 <button class="modal-close" @onclick="CloseModal">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label class="form-label">Vendor Name *</label>
+                    <label class="form-label">Organization Name *</label>
                     <input type="text" class="form-control" @bind="currentVendor.Name" />
                     @if (!string.IsNullOrEmpty(vendorError))
                     {
@@ -73,10 +76,80 @@
     </div>
 }
 
+@if (showHolidayModal && holidayVendor != null)
+{
+    <div class="modal-backdrop" @onclick="CloseHolidayModal">
+        <div class="modal modal-lg" @onclick:stopPropagation="true" role="dialog" aria-labelledby="modal-title-holidays">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modal-title-holidays">Manage Holidays - @holidayVendor.Name</h3>
+                <button class="modal-close" @onclick="CloseHolidayModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="unavailability-form">
+                    <h4>@(isEditingHoliday ? "Edit Holiday" : "Add Holiday")</h4>
+                    @if (!string.IsNullOrEmpty(holidayError))
+                    {
+                        <div class="alert alert-error">@holidayError</div>
+                    }
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label class="form-label">Date *</label>
+                            <input type="date" class="form-control" @bind="currentHoliday.Date" />
+                        </div>
+                        <div class="form-group flex-1">
+                            <label class="form-label">Holiday Name *</label>
+                            <input type="text" class="form-control" @bind="currentHoliday.Name" placeholder="e.g. Christmas Day" />
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        @if (isEditingHoliday)
+                        {
+                            <button class="btn btn-secondary btn-sm" @onclick="CancelEditHoliday">Cancel</button>
+                        }
+                        <button class="btn btn-primary btn-sm" @onclick="SaveHoliday">
+                            @(isEditingHoliday ? "Update" : "Add")
+                        </button>
+                    </div>
+                </div>
+
+                @if (vendorHolidays.Any())
+                {
+                    <div class="unavailability-list">
+                        <h4>Existing Holidays</h4>
+                        <div class="unavailability-items">
+                            @foreach (var h in vendorHolidays.OrderBy(x => x.Date))
+                            {
+                                <div class="unavailability-item">
+                                    <div class="unavailability-info">
+                                        <span class="unavailability-dates">@h.Date.ToString("MMM dd, yyyy")</span>
+                                        <span class="badge badge-holiday">@h.Name</span>
+                                    </div>
+                                    <div class="unavailability-actions">
+                                        <button class="btn-icon-action" data-tooltip="Edit" @onclick="() => EditHoliday(h)"><i class="icon-pencil"></i></button>
+                                        <button class="btn-icon-action danger" data-tooltip="Delete" @onclick="() => ConfirmDeleteHoliday(h)"><i class="icon-trash-2"></i></button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseHolidayModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
 <ConfirmDeleteModal Visible="showDeleteConfirm"
-    Message="@($"Are you sure you want to delete vendor \"{vendorToDelete?.Name}\"?")"
+    Message="@($"Are you sure you want to delete organization \"{vendorToDelete?.Name}\"?")"
     OnConfirm="DeleteVendor"
     OnCancel="CancelDelete" />
+
+<ConfirmDeleteModal Visible="showDeleteHolidayConfirm"
+    Message="@($"Are you sure you want to delete the holiday \"{holidayToDelete?.Name}\" ({holidayToDelete?.Date.ToString("MMM dd, yyyy")})?")"
+    OnConfirm="DeleteHoliday"
+    OnCancel="CancelDeleteHoliday" />
 
 @code {
     private List<Vendor> vendors = new();
@@ -86,6 +159,16 @@
     private string? vendorError = null;
     private bool showDeleteConfirm = false;
     private Vendor? vendorToDelete = null;
+
+    // Holiday management
+    private bool showHolidayModal = false;
+    private Vendor? holidayVendor = null;
+    private List<VendorHoliday> vendorHolidays = new();
+    private VendorHoliday currentHoliday = new() { Date = DateTime.Today };
+    private bool isEditingHoliday = false;
+    private string? holidayError = null;
+    private bool showDeleteHolidayConfirm = false;
+    private VendorHoliday? holidayToDelete = null;
 
     // Pagination & Sorting
     private int currentPage = 1;
@@ -101,6 +184,7 @@
             {
                 "Name" => sortAscending ? vendors.OrderBy(v => v.Name) : vendors.OrderByDescending(v => v.Name),
                 "Resources" => sortAscending ? vendors.OrderBy(v => v.Resources.Count) : vendors.OrderByDescending(v => v.Resources.Count),
+                "Holidays" => sortAscending ? vendors.OrderBy(v => v.Holidays.Count) : vendors.OrderByDescending(v => v.Holidays.Count),
                 _ => vendors.OrderBy(v => v.Name)
             };
         }
@@ -132,7 +216,11 @@
 
     private async Task LoadVendors()
     {
-        vendors = await DbContext.Vendors.Include(v => v.Resources).OrderBy(v => v.Name).ToListAsync();
+        vendors = await DbContext.Vendors
+            .Include(v => v.Resources)
+            .Include(v => v.Holidays)
+            .OrderBy(v => v.Name)
+            .ToListAsync();
     }
 
     private void OpenAddModal()
@@ -163,7 +251,7 @@
             .AnyAsync(v => v.Name.ToLower() == nameToCheck && (!isEditing || v.Id != currentVendor.Id));
         if (duplicate)
         {
-            vendorError = "A vendor with this name already exists.";
+            vendorError = "An organization with this name already exists.";
             return;
         }
 
@@ -206,5 +294,131 @@
         vendorToDelete = null;
         showDeleteConfirm = false;
         await LoadVendors();
+    }
+
+    // Holiday management methods
+    private async Task OpenHolidayModal(Vendor vendor)
+    {
+        holidayVendor = vendor;
+        await LoadVendorHolidays();
+        ResetHolidayForm();
+        showHolidayModal = true;
+    }
+
+    private void CloseHolidayModal()
+    {
+        showHolidayModal = false;
+        holidayVendor = null;
+        vendorHolidays.Clear();
+    }
+
+    private async Task LoadVendorHolidays()
+    {
+        if (holidayVendor == null) return;
+        vendorHolidays = await DbContext.VendorHolidays
+            .Where(h => h.VendorId == holidayVendor.Id)
+            .ToListAsync();
+    }
+
+    private void ResetHolidayForm()
+    {
+        currentHoliday = new VendorHoliday { Date = DateTime.Today };
+        isEditingHoliday = false;
+        holidayError = null;
+    }
+
+    private void EditHoliday(VendorHoliday h)
+    {
+        currentHoliday = new VendorHoliday
+        {
+            Id = h.Id,
+            VendorId = h.VendorId,
+            Date = h.Date,
+            Name = h.Name
+        };
+        isEditingHoliday = true;
+        holidayError = null;
+    }
+
+    private void CancelEditHoliday()
+    {
+        ResetHolidayForm();
+    }
+
+    private async Task SaveHoliday()
+    {
+        holidayError = null;
+
+        if (holidayVendor == null) return;
+
+        if (string.IsNullOrWhiteSpace(currentHoliday.Name))
+        {
+            holidayError = "Holiday name is required.";
+            return;
+        }
+
+        // Check for duplicate date
+        var duplicateDate = vendorHolidays
+            .Where(h => isEditingHoliday ? h.Id != currentHoliday.Id : true)
+            .Any(h => h.Date.Date == currentHoliday.Date.Date);
+
+        if (duplicateDate)
+        {
+            holidayError = $"A holiday already exists on {currentHoliday.Date:MMM dd, yyyy} for this vendor.";
+            return;
+        }
+
+        if (isEditingHoliday)
+        {
+            var existing = await DbContext.VendorHolidays.FindAsync(currentHoliday.Id);
+            if (existing != null)
+            {
+                existing.Date = currentHoliday.Date;
+                existing.Name = currentHoliday.Name;
+                await DbContext.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            var newHoliday = new VendorHoliday
+            {
+                VendorId = holidayVendor.Id,
+                Date = currentHoliday.Date,
+                Name = currentHoliday.Name
+            };
+            DbContext.VendorHolidays.Add(newHoliday);
+            await DbContext.SaveChangesAsync();
+        }
+
+        await LoadVendorHolidays();
+        await LoadVendors();
+        ResetHolidayForm();
+    }
+
+    private void ConfirmDeleteHoliday(VendorHoliday h)
+    {
+        holidayToDelete = h;
+        showDeleteHolidayConfirm = true;
+    }
+
+    private void CancelDeleteHoliday()
+    {
+        holidayToDelete = null;
+        showDeleteHolidayConfirm = false;
+    }
+
+    private async Task DeleteHoliday()
+    {
+        if (holidayToDelete == null) return;
+        var existing = await DbContext.VendorHolidays.FindAsync(holidayToDelete.Id);
+        if (existing != null)
+        {
+            DbContext.VendorHolidays.Remove(existing);
+            await DbContext.SaveChangesAsync();
+            await LoadVendorHolidays();
+            await LoadVendors();
+        }
+        holidayToDelete = null;
+        showDeleteHolidayConfirm = false;
     }
 }

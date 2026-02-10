@@ -14,8 +14,8 @@
         <p class="page-subtitle">Manage your team members and their skills</p>
     </div>
     <div class="page-header-actions">
-        <button class="btn btn-secondary" @onclick="OpenImportModal">Import Leaves</button>
-        <button class="btn btn-primary" @onclick="OpenAddModal">+ Add Resource</button>
+        <button class="btn btn-secondary" @onclick="OpenImportModal"><i class="icon-upload"></i> Import Leaves</button>
+        <button class="btn btn-primary" @onclick="OpenAddModal"><i class="icon-plus"></i> Add Resource</button>
     </div>
 </div>
 
@@ -33,8 +33,8 @@
                 }
             </select>
             <select class="form-control w-auto" @bind="filterVendorId" @bind:after="ResetPage">
-                <option value="0">All Vendors</option>
-                <option value="-1">No Vendor</option>
+                <option value="0">All Organizations</option>
+                <option value="-1">No Organization</option>
                 @foreach (var vendor in vendors)
                 {
                     <option value="@vendor.Id">@vendor.Name</option>
@@ -49,7 +49,7 @@
                 <tr>
                     <th class="sortable @(GetSortClass("Name"))" @onclick='() => SetSort("Name")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Name"))">Name</th>
                     <th class="sortable @(GetSortClass("Role"))" @onclick='() => SetSort("Role")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Role"))">Role</th>
-                    <th class="sortable @(GetSortClass("Vendor"))" @onclick='() => SetSort("Vendor")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Vendor"))">Vendor</th>
+                    <th class="sortable @(GetSortClass("Vendor"))" @onclick='() => SetSort("Vendor")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "Vendor"))">Organization</th>
                     <th>Skills</th>
                     <th class="sortable @(GetSortClass("EndDate"))" @onclick='() => SetSort("EndDate")' aria-sort="@(DisplayHelpers.GetAriaSort(sortColumn, sortAscending, "EndDate"))">End Date</th>
                     <th>Actions</th>
@@ -101,9 +101,9 @@
                             }
                         </td>
                         <td>
-                            <button class="btn btn-secondary btn-sm" @onclick="() => OpenEditModal(resource)">Edit</button>
-                            <button class="btn btn-secondary btn-sm" @onclick="() => OpenUnavailabilityModal(resource)">Unavailability</button>
-                            <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDeleteResource(resource)">Delete</button>
+                            <button class="btn-icon-action" data-tooltip="Edit" @onclick="() => OpenEditModal(resource)"><i class="icon-pencil"></i></button>
+                            <button class="btn-icon-action" data-tooltip="Unavailability" @onclick="() => OpenUnavailabilityModal(resource)"><i class="icon-calendar-off"></i></button>
+                            <button class="btn-icon-action danger" data-tooltip="Delete" @onclick="() => ConfirmDeleteResource(resource)"><i class="icon-trash-2"></i></button>
                         </td>
                     </tr>
                 }
@@ -144,7 +144,7 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Vendor</label>
+                    <label class="form-label">Organization</label>
                     <select class="form-control" @bind="selectedVendorId">
                         <option value="0">None</option>
                         @foreach (var vendor in vendors)
@@ -266,8 +266,27 @@
                                         }
                                     </div>
                                     <div class="unavailability-actions">
-                                        <button class="btn btn-secondary btn-sm" @onclick="() => EditUnavailability(u)">Edit</button>
-                                        <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDeleteUnavailability(u)">Delete</button>
+                                        <button class="btn-icon-action" data-tooltip="Edit" @onclick="() => EditUnavailability(u)"><i class="icon-pencil"></i></button>
+                                        <button class="btn-icon-action danger" data-tooltip="Delete" @onclick="() => ConfirmDeleteUnavailability(u)"><i class="icon-trash-2"></i></button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (resourceVendorHolidays.Any())
+                {
+                    <div class="unavailability-list">
+                        <h4>Organization Holidays <span class="text-muted" style="font-size: 0.8rem; font-weight: normal;">- Managed in Settings</span></h4>
+                        <div class="unavailability-items">
+                            @foreach (var vh in resourceVendorHolidays)
+                            {
+                                <div class="unavailability-item" style="opacity: 0.85;">
+                                    <div class="unavailability-info">
+                                        <span class="unavailability-dates">@vh.Date.ToString("MMM dd, yyyy")</span>
+                                        <span class="badge badge-holiday">@vh.Name</span>
+                                        <span class="unavailability-hours">8 h/day</span>
                                     </div>
                                 </div>
                             }
@@ -421,6 +440,7 @@
     private bool showUnavailabilityModal = false;
     private Resource? unavailabilityResource = null;
     private List<ResourceUnavailability> resourceUnavailabilities = new();
+    private List<VendorHoliday> resourceVendorHolidays = new();
 
     // Import functionality
     private bool showImportModal = false;
@@ -625,6 +645,7 @@
     {
         unavailabilityResource = resource;
         await LoadResourceUnavailabilities();
+        await LoadResourceVendorHolidays();
         ResetUnavailabilityForm();
         showUnavailabilityModal = true;
     }
@@ -634,6 +655,7 @@
         showUnavailabilityModal = false;
         unavailabilityResource = null;
         resourceUnavailabilities.Clear();
+        resourceVendorHolidays.Clear();
     }
 
     private async Task LoadResourceUnavailabilities()
@@ -641,6 +663,19 @@
         if (unavailabilityResource == null) return;
         resourceUnavailabilities = await DbContext.ResourceUnavailabilities
             .Where(u => u.ResourceId == unavailabilityResource.Id)
+            .ToListAsync();
+    }
+
+    private async Task LoadResourceVendorHolidays()
+    {
+        if (unavailabilityResource?.VendorId == null)
+        {
+            resourceVendorHolidays = new List<VendorHoliday>();
+            return;
+        }
+        resourceVendorHolidays = await DbContext.VendorHolidays
+            .Where(vh => vh.VendorId == unavailabilityResource.VendorId)
+            .OrderBy(vh => vh.Date)
             .ToListAsync();
     }
 
@@ -706,6 +741,17 @@
         if (overlapping != null)
         {
             unavailabilityError = $"This period overlaps with existing unavailability ({overlapping.StartDate:MMM dd} - {overlapping.EndDate:MMM dd, yyyy}).";
+            return;
+        }
+
+        // Check for overlap with vendor holidays
+        var overlappingHoliday = resourceVendorHolidays
+            .Where(vh => vh.Date >= currentUnavailability.StartDate && vh.Date <= currentUnavailability.EndDate)
+            .FirstOrDefault();
+
+        if (overlappingHoliday != null)
+        {
+            unavailabilityError = $"This period overlaps with organization holiday \"{overlappingHoliday.Name}\" ({overlappingHoliday.Date:MMM dd, yyyy}).";
             return;
         }
 

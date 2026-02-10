@@ -19,25 +19,25 @@
         <ul class="nav-menu">
             <li class="nav-item">
                 <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                    <span class="nav-icon">📊</span>
+                    <span class="nav-icon"><i class="icon-layout-dashboard"></i></span>
                     <span class="nav-text">Dashboard</span>
                 </NavLink>
             </li>
             <li class="nav-item">
                 <NavLink class="nav-link" href="projects">
-                    <span class="nav-icon">📁</span>
+                    <span class="nav-icon"><i class="icon-folder"></i></span>
                     <span class="nav-text">Projects</span>
                 </NavLink>
             </li>
             <li class="nav-item">
                 <NavLink class="nav-link" href="allocations">
-                    <span class="nav-icon">🎯</span>
+                    <span class="nav-icon"><i class="icon-target"></i></span>
                     <span class="nav-text">Allocations</span>
                 </NavLink>
             </li>
             <li class="nav-item">
                 <NavLink class="nav-link" href="calendar">
-                    <span class="nav-icon">📆</span>
+                    <span class="nav-icon"><i class="icon-calendar"></i></span>
                     <span class="nav-text">Calendar</span>
                 </NavLink>
             </li>
@@ -49,43 +49,43 @@
         <ul class="nav-menu">
             <li class="nav-item">
                 <NavLink class="nav-link" href="resources">
-                    <span class="nav-icon">👥</span>
+                    <span class="nav-icon"><i class="icon-users"></i></span>
                     <span class="nav-text">Resources</span>
                 </NavLink>
             </li>
             <li class="nav-item">
                 <NavLink class="nav-link" href="settings/vendors">
-                    <span class="nav-icon">🏢</span>
-                    <span class="nav-text">Vendors</span>
+                    <span class="nav-icon"><i class="icon-building-2"></i></span>
+                    <span class="nav-text">Organizations</span>
                 </NavLink>
             </li>
             <li class="nav-item">
                 <NavLink class="nav-link" href="settings/roles">
-                    <span class="nav-icon">🎭</span>
+                    <span class="nav-icon"><i class="icon-drama"></i></span>
                     <span class="nav-text">Roles</span>
                 </NavLink>
             </li>
             <li class="nav-item">
                 <NavLink class="nav-link" href="settings/skills">
-                    <span class="nav-icon">🛠️</span>
+                    <span class="nav-icon"><i class="icon-wrench"></i></span>
                     <span class="nav-text">Skills</span>
                 </NavLink>
             </li>
             <li class="nav-item">
                 <NavLink class="nav-link" href="settings/statuses">
-                    <span class="nav-icon">🏷️</span>
+                    <span class="nav-icon"><i class="icon-tag"></i></span>
                     <span class="nav-text">Statuses</span>
                 </NavLink>
             </li>
             <li class="nav-item">
                 <NavLink class="nav-link" href="settings/themes">
-                    <span class="nav-icon">🎨</span>
+                    <span class="nav-icon"><i class="icon-palette"></i></span>
                     <span class="nav-text">Themes</span>
                 </NavLink>
             </li>
             <li class="nav-item">
                 <NavLink class="nav-link" href="settings/healths">
-                    <span class="nav-icon">💚</span>
+                    <span class="nav-icon"><i class="icon-heart-pulse"></i></span>
                     <span class="nav-text">Health</span>
                 </NavLink>
             </li>
@@ -97,11 +97,11 @@
     <AuthorizeView>
         <Authorized>
             <div class="user-info">
-                <span class="user-icon">👤</span>
+                <span class="user-icon"><i class="icon-user"></i></span>
                 <span class="user-name">@(context.User.FindFirst("DisplayName")?.Value ?? context.User.Identity?.Name)</span>
             </div>
             <a href="/logout" class="logout-link">
-                <span class="logout-icon">🚪</span>
+                <span class="logout-icon"><i class="icon-log-out"></i></span>
                 <span class="logout-text">Logout</span>
             </a>
         </Authorized>
